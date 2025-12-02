@@ -9,15 +9,27 @@ COLORS = {
     'text_secondary': '#7F8C8D',
     'text_light': '#95A5A6',
     'text_dark': '#2C3E50',
+    'text2': '#7F8C8D',
+    'text3': '#95A5A6',
     'success': '#52C5B6',
     'warning': '#F39C6B',
     'error': '#E17B7B',
+    'info': '#6B9BD1',
     'border': '#E8ECEF',
     'progress_bg': '#E8ECEF',
     'progress_fill': '#6B9BD1',
     'glow': '#6B9BD1',
-    'shadow': 'rgba(107, 155, 209, 0.15)'
+    'shadow': 'rgba(107, 155, 209, 0.15)',
+    'card': '#FFFFFF',
+    'bg': '#F5F7FA',
+    'secondary': '#7F8C8D'
 }
+
+THEMES = {
+    'default': COLORS
+}
+
+DEFAULT_THEME = 'default'
 
 POINTS = {
     'correct_answer': 1,
