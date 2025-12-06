@@ -1,3 +1,6 @@
+# ============================================================================
+# app.py - الملف الرئيسي
+# ============================================================================
 from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
@@ -36,8 +39,6 @@ for var in required_env_vars:
 # إعداد LINE Bot API v3
 configuration = Configuration(access_token=os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
-
-# إنشاء API client
 api_client = ApiClient(configuration)
 line_bot_api = MessagingApi(api_client)
 
@@ -365,9 +366,12 @@ def handle_message(event):
         # ألعاب تحتاج تسجيل
         if text == "توافق":
             response = game_manager.start_game("compatibility", group_id)
-            if isinstance(response, FlexMessage):
-                response.quick_reply = get_quick_reply()
-            reply_message(event.reply_token, response)
+            if response:
+                if isinstance(response, FlexMessage):
+                    response.quick_reply = get_quick_reply()
+                elif isinstance(response, TextMessage):
+                    response.quick_reply = get_quick_reply()
+                reply_message(event.reply_token, response)
             return
 
         game_commands = {
