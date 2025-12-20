@@ -1,12 +1,24 @@
-FROM python:3.11-slim
+FROM golang:1.21-alpine AS builder
+
+RUN apk add --no-cache git gcc musl-dev sqlite-dev
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY go.mod go.sum ./
+RUN go mod download
 
-COPY spam_bot.py .
+COPY . .
+
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o protection-bot .
+
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates sqlite-libs
+
+WORKDIR /root/
+
+COPY --from=builder /app/protection-bot .
 
 EXPOSE 5000
 
-CMD ["gunicorn", "spam_bot:app", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120"]
+CMD ["./protection-bot"]
