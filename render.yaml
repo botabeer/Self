@@ -1,14 +1,18 @@
 services:
   - type: web
-    name: spam-bot
-    env: python
+    name: protection-bot-go
+    env: go
     region: oregon
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn spam_bot:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    buildCommand: go build -o protection-bot
+    startCommand: ./protection-bot
     envVars:
       - key: LINE_CHANNEL_ACCESS_TOKEN
         sync: false
       - key: LINE_CHANNEL_SECRET
         sync: false
-      - key: PYTHON_VERSION
-        value: 3.11.7
+      - key: PORT
+        value: 5000
+    disk:
+      name: protection-data
+      mountPath: /app
+      sizeGB: 1
