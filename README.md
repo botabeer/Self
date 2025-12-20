@@ -1,37 +1,70 @@
-# PYTHON3
-SELF BOT PYTHON3.
+# بوت لاين - PYTHON3
+بوت سيلف لاين بايثون 3
 ------
--
-Cara Install Self Bot :
-------
-- Ketik -> `apt update`
-- Ketik -> `apt upgrade`
-- Ketik -> `apt install git`
-- Ketik -> `apt install python3-pip`
-- Ketik -> `pip3 install rsa`
-- Ketik -> `pip3 install thrift==0.11.0`
-- Ketik -> `pip3 install requests`
-- Ketik -> `pip3 install bs4`
-- Ketik -> `pip3 install gtts`
-- Ketik -> `pip3 install pytz`
-- Ketik -> `pip3 install humanfriendly`
-- Ketik -> `pip3 install googletrans`
-- Ketik -> `git clone https://github.com/Nadyatjia/BotLinePython3`
-- Ketik -> `cd BotLinePython3`
-- Ketik -> `python3 Nadyasb.py`
 
-Cara Menjalankan Bot Kembali :
+## طريقة تثبيت البوت:
 ------
-- Ketik -> `cd LineBotPython3`
-- Ketik -> `python3 Nadyasb.py`
+```bash
+apt update
+apt upgrade
+apt install git
+apt install python3-pip
+pip3 install rsa
+pip3 install thrift==0.11.0
+pip3 install requests
+pip3 install bs4
+pip3 install gtts
+pip3 install pytz
+pip3 install humanfriendly
+pip3 install googletrans
+git clone https://github.com/Nadyatjia/BotLinePython3
+cd BotLinePython3
+python3 Nadyasb.py
+```
 
-
-Credit By@ Nadya Sutjiadi.
+## طريقة تشغيل البوت مرة أخرى:
 ------
-- `Follow My Instagram : nadya.tjia`
-- `Add My ID LINE : nad_nad. (pake titik)`
+```bash
+cd LineBotPython3
+python3 Nadyasb.py
+```
 
-Thx To :
+---
+
+## الحقوق والتقدير:
 ------
-- `LINE-TCR TEAM`
-- `HELLO-WORLD`
+**المطور:** Nadya Sutjiadi
+
+**حسابات التواصل:**
+- 📱 **انستقرام:** `nadya.tjia`
+- 💬 **لاين:** `nad_nad.` (مع النقطة)
+
+---
+
+## شكر خاص لـ:
+------
+- ✨ **LINE-TCR TEAM**
+- ✨ **HELLO-WORLD**
+
+---
+
+## ملاحظات مهمة:
+- تأكد من تثبيت Python 3.6 أو أحدث
+- استخدم الأوامر بالإنجليزية كما هي موضحة في قائمة Help
+- جميع الرسائل معربة والأوامر إنجليزية
+- يمكنك تعديل ملف `temp.json` للإعدادات
+
+---
+
+## الدعم:
+للحصول على الدعم أو الإبلاغ عن مشاكل، تواصل عبر:
+- لاين: `nad_nad.`
+- انستقرام: `@nadya.tjia`
+
+---
+
+**📌 ممنوع إعادة البيع أو التعديل بدون إذن**
+
+**🔰 النسخة:** Premium - معربة بالكامل
+
+**⚡ التحديث الأخير:** 2024
