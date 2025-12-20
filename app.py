@@ -12,7 +12,7 @@ from linebot.v3.webhooks import (
 )
 from apscheduler.schedulers.background import BackgroundScheduler
 from database import Database
-from protection import ProtectionManager
+from protection_advanced import AdvancedProtection
 from admin_system import AdminSystem
 from ui_builder import UIBuilder
 import os
@@ -39,12 +39,12 @@ api_client = ApiClient(configuration)
 line_bot_api = MessagingApi(api_client)
 
 Database.init()
-protection_manager = ProtectionManager(line_bot_api)
+protection = AdvancedProtection(line_bot_api)
 admin_system = AdminSystem(line_bot_api)
 
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=Database.cleanup_warnings, trigger="interval", hours=24)
-scheduler.add_job(func=protection_manager.cleanup_temp_bans, trigger="interval", minutes=5)
+scheduler.add_job(func=protection.cleanup_old_data, trigger="interval", minutes=10)
 scheduler.start()
 atexit.register(lambda: scheduler.shutdown())
 
@@ -68,6 +68,22 @@ def push_message(to, messages):
     except Exception as e:
         logger.error(f"خطأ في الارسال: {e}")
 
+def delete_message(message_id):
+    try:
+        line_bot_api.delete_message(message_id)
+        return True
+    except Exception as e:
+        logger.error(f"فشل حذف الرسالة: {e}")
+        return False
+
+def kick_user(group_id, user_id):
+    try:
+        line_bot_api.kick_group_member(group_id, user_id)
+        return True
+    except Exception as e:
+        logger.error(f"فشل الطرد: {e}")
+        return False
+
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers.get('X-Line-Signature', '')
@@ -90,6 +106,7 @@ def handle_message(event):
         text = event.message.text.strip()
         user_id = event.source.user_id
         group_id = getattr(event.source, 'group_id', None)
+        message_id = event.message.id
         
         if not group_id:
             reply_message(event.reply_token, TextMessage(text="هذا البوت يعمل في القروبات فقط"))
@@ -100,6 +117,11 @@ def handle_message(event):
         
         is_owner = admin_system.is_owner(user_id)
         is_admin = admin_system.is_admin(user_id) or is_owner
+        
+        # فحص اذا المستخدم مكتوم
+        if protection.is_muted(group_id, user_id) and not is_admin:
+            delete_message(message_id)
+            return
         
         # اوامر المالك
         if text.startswith("اضف مالك "):
@@ -177,13 +199,13 @@ def handle_message(event):
                     return
                 
                 reason = text.split(maxsplit=2)[2] if len(text.split()) > 2 else "مخالفة قوانين القروب"
-                success = protection_manager.ban_user(group_id, mentioned, user_id, reason)
+                success = Database.ban_user(group_id, mentioned, user_id, reason)
                 
                 if success:
-                    try:
-                        line_bot_api.kick_group_member(group_id, mentioned)
-                        reply_message(event.reply_token, TextMessage(text=f"تم حظر المستخدم\nالسبب: {reason}"))
-                    except:
+                    if kick_user(group_id, mentioned):
+                        Database.log_action(group_id, mentioned, user_id, "ban", reason)
+                        reply_message(event.reply_token, TextMessage(text=f"تم حظر {display_name}\nالسبب: {reason}"))
+                    else:
                         reply_message(event.reply_token, TextMessage(text="تم اضافة المستخدم للقائمة السوداء"))
                 else:
                     reply_message(event.reply_token, TextMessage(text="فشل الحظر"))
@@ -198,7 +220,7 @@ def handle_message(event):
             
             mentioned = admin_system.extract_user_id(text)
             if mentioned:
-                success = protection_manager.unban_user(group_id, mentioned)
+                success = Database.unban_user(group_id, mentioned)
                 reply_message(event.reply_token, TextMessage(text="تم الغاء الحظر" if success else "المستخدم غير محظور"))
             else:
                 reply_message(event.reply_token, TextMessage(text="قم بعمل منشن للمستخدم"))
@@ -220,8 +242,9 @@ def handle_message(event):
                 if len(parts) > 2 and parts[2].isdigit():
                     duration = int(parts[2])
                 
-                success = protection_manager.mute_user(group_id, mentioned, duration)
-                reply_message(event.reply_token, TextMessage(text=f"تم كتم المستخدم لمدة {duration} دقيقة" if success else "فشل الكتم"))
+                protection.mute_user(group_id, mentioned, duration)
+                Database.log_action(group_id, mentioned, user_id, "mute", f"{duration} دقيقة")
+                reply_message(event.reply_token, TextMessage(text=f"تم كتم المستخدم لمدة {duration} دقيقة"))
             else:
                 reply_message(event.reply_token, TextMessage(text="قم بعمل منشن للمستخدم\nالصيغة: كتم @المستخدم المدة"))
             return
@@ -233,8 +256,8 @@ def handle_message(event):
             
             mentioned = admin_system.extract_user_id(text)
             if mentioned:
-                success = protection_manager.unmute_user(group_id, mentioned)
-                reply_message(event.reply_token, TextMessage(text="تم الغاء الكتم" if success else "المستخدم غير مكتوم"))
+                protection.mute_user(group_id, mentioned, 0)
+                reply_message(event.reply_token, TextMessage(text="تم الغاء الكتم"))
             else:
                 reply_message(event.reply_token, TextMessage(text="قم بعمل منشن للمستخدم"))
             return
@@ -251,13 +274,12 @@ def handle_message(event):
                     return
                 
                 reason = text.split(maxsplit=2)[2] if len(text.split()) > 2 else "مخالفة"
-                warnings = protection_manager.warn_user(group_id, mentioned, user_id, reason)
+                warnings = Database.add_warning(group_id, mentioned, user_id, reason)
                 
                 if warnings >= 3:
-                    try:
-                        line_bot_api.kick_group_member(group_id, mentioned)
+                    if kick_user(group_id, mentioned):
                         reply_message(event.reply_token, TextMessage(text=f"تم طرد المستخدم بعد {warnings} انذارات"))
-                    except:
+                    else:
                         reply_message(event.reply_token, TextMessage(text=f"وصل المستخدم الى {warnings} انذارات"))
                 else:
                     reply_message(event.reply_token, TextMessage(text=f"تم اعطاء انذار ({warnings}/3)\nالسبب: {reason}"))
@@ -272,7 +294,7 @@ def handle_message(event):
             
             mentioned = admin_system.extract_user_id(text)
             if mentioned:
-                protection_manager.clear_warnings(group_id, mentioned)
+                Database.clear_warnings(group_id, mentioned)
                 reply_message(event.reply_token, TextMessage(text="تم حذف جميع الانذارات"))
             else:
                 reply_message(event.reply_token, TextMessage(text="قم بعمل منشن للمستخدم"))
@@ -281,7 +303,7 @@ def handle_message(event):
         if text.startswith("انذارات "):
             mentioned = admin_system.extract_user_id(text)
             if mentioned:
-                warnings = protection_manager.get_user_warnings(group_id, mentioned)
+                warnings = Database.get_user_warnings(group_id, mentioned)
                 reply_message(event.reply_token, TextMessage(text=f"عدد الانذارات: {warnings}/3"))
             else:
                 reply_message(event.reply_token, TextMessage(text="قم بعمل منشن للمستخدم"))
@@ -298,10 +320,10 @@ def handle_message(event):
                     reply_message(event.reply_token, TextMessage(text="لا يمكن طرد ادمن او مالك"))
                     return
                 
-                try:
-                    line_bot_api.kick_group_member(group_id, mentioned)
+                if kick_user(group_id, mentioned):
+                    Database.log_action(group_id, mentioned, user_id, "kick", "طرد")
                     reply_message(event.reply_token, TextMessage(text="تم طرد المستخدم"))
-                except Exception as e:
+                else:
                     reply_message(event.reply_token, TextMessage(text="فشل الطرد تأكد من صلاحيات البوت"))
             else:
                 reply_message(event.reply_token, TextMessage(text="قم بعمل منشن للمستخدم"))
@@ -319,12 +341,13 @@ def handle_message(event):
                 "السبام": "spam",
                 "الفلود": "flood",
                 "الكلمات": "bad_words",
-                "الترحيب": "welcome"
+                "الترحيب": "welcome",
+                "الحماية": "all"
             }
             
             if setting in settings_map:
-                protection_manager.update_settings(group_id, settings_map[setting], True)
-                reply_message(event.reply_token, TextMessage(text=f"تم تفعيل حماية {setting}"))
+                Database.update_group_settings(group_id, settings_map[setting], True)
+                reply_message(event.reply_token, TextMessage(text=f"تم تفعيل {setting}"))
             else:
                 reply_message(event.reply_token, TextMessage(text="خيار غير صحيح"))
             return
@@ -340,12 +363,13 @@ def handle_message(event):
                 "السبام": "spam",
                 "الفلود": "flood",
                 "الكلمات": "bad_words",
-                "الترحيب": "welcome"
+                "الترحيب": "welcome",
+                "الحماية": "all"
             }
             
             if setting in settings_map:
-                protection_manager.update_settings(group_id, settings_map[setting], False)
-                reply_message(event.reply_token, TextMessage(text=f"تم تعطيل حماية {setting}"))
+                Database.update_group_settings(group_id, settings_map[setting], False)
+                reply_message(event.reply_token, TextMessage(text=f"تم تعطيل {setting}"))
             else:
                 reply_message(event.reply_token, TextMessage(text="خيار غير صحيح"))
             return
@@ -355,7 +379,7 @@ def handle_message(event):
                 reply_message(event.reply_token, TextMessage(text="هذا الامر للادمن فقط"))
                 return
             
-            settings = protection_manager.get_settings(group_id)
+            settings = Database.get_group_settings(group_id)
             flex = FlexMessage(
                 alt_text="اعدادات الحماية",
                 contents=FlexContainer.from_dict(UIBuilder.settings_card(settings))
@@ -377,7 +401,7 @@ def handle_message(event):
                 reply_message(event.reply_token, TextMessage(text="هذا الامر للادمن فقط"))
                 return
             
-            stats = protection_manager.get_group_stats(group_id)
+            stats = Database.get_group_stats(group_id)
             flex = FlexMessage(
                 alt_text="احصائيات القروب",
                 contents=FlexContainer.from_dict(UIBuilder.stats_card(stats))
@@ -390,7 +414,7 @@ def handle_message(event):
                 reply_message(event.reply_token, TextMessage(text="هذا الامر للادمن فقط"))
                 return
             
-            banned = protection_manager.get_banned_users(group_id)
+            banned = Database.get_banned_users(group_id)
             flex = FlexMessage(
                 alt_text="قائمة المحظورين",
                 contents=FlexContainer.from_dict(UIBuilder.banned_users_card(banned))
@@ -398,22 +422,41 @@ def handle_message(event):
             reply_message(event.reply_token, flex)
             return
         
-        # فحص الرسالة
-        if protection_manager.is_muted(group_id, user_id):
-            try:
-                line_bot_api.delete_message(event.message.id)
-            except:
-                pass
-            return
-        
-        violation = protection_manager.check_message(group_id, user_id, text, display_name)
-        if violation:
-            try:
-                line_bot_api.delete_message(event.message.id)
-            except:
-                pass
-            
-            push_message(group_id, TextMessage(text=violation))
+        # الفحص الشامل للرسالة اذا مو من ادمن
+        if not is_admin:
+            settings = Database.get_group_settings(group_id)
+            if settings.get('protection_enabled', True):
+                result = protection.comprehensive_check(group_id, user_id, text, display_name)
+                
+                if result.get('violation'):
+                    delete_message(message_id)
+                    
+                    reason = result['reason']
+                    action = result['action']
+                    
+                    if action == 'ban':
+                        Database.ban_user(group_id, user_id, "bot", reason)
+                        kick_user(group_id, user_id)
+                        push_message(group_id, TextMessage(text=f"تم حظر {display_name}\nالسبب: {reason}"))
+                    
+                    elif action == 'kick':
+                        kick_user(group_id, user_id)
+                        push_message(group_id, TextMessage(text=f"تم طرد {display_name}\nالسبب: {reason}"))
+                    
+                    elif action == 'warn_mute':
+                        warnings = Database.add_warning(group_id, user_id, "bot", reason)
+                        protection.mute_user(group_id, user_id, 10)
+                        push_message(group_id, TextMessage(text=f"انذار {display_name} ({warnings}/3)\nتم الكتم 10 دقائق\nالسبب: {reason}"))
+                    
+                    elif action == 'warn':
+                        warnings = Database.add_warning(group_id, user_id, "bot", reason)
+                        if warnings >= 3:
+                            kick_user(group_id, user_id)
+                            push_message(group_id, TextMessage(text=f"تم طرد {display_name} بعد 3 انذارات"))
+                        else:
+                            push_message(group_id, TextMessage(text=f"انذار {display_name} ({warnings}/3)\nالسبب: {reason}"))
+                    
+                    return
     
     except Exception as e:
         logger.error(f"خطأ في معالجة الرسالة: {e}", exc_info=True)
@@ -426,15 +469,14 @@ def handle_member_join(event):
         for member in event.joined.members:
             user_id = member.user_id
             
-            if protection_manager.is_banned(group_id, user_id):
-                try:
-                    line_bot_api.kick_group_member(group_id, user_id)
-                    push_message(group_id, TextMessage(text="تم طرد مستخدم محظور حاول الدخول"))
-                except:
-                    pass
+            if Database.is_banned(group_id, user_id):
+                kick_user(group_id, user_id)
+                push_message(group_id, TextMessage(text="تم طرد مستخدم محظور حاول الدخول"))
                 continue
             
-            settings = protection_manager.get_settings(group_id)
+            protection.register_new_member(group_id, user_id)
+            
+            settings = Database.get_group_settings(group_id)
             if settings.get('welcome', True):
                 try:
                     profile = line_bot_api.get_group_member_profile(group_id, user_id)
@@ -455,7 +497,7 @@ def handle_member_join(event):
 def handle_join(event):
     try:
         group_id = event.source.group_id
-        protection_manager.init_group(group_id)
+        Database.create_group(group_id)
         
         flex = FlexMessage(
             alt_text="شكرا للاضافة",
