@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: mafia-bot
+    name: protection-bot
     env: python
     region: oregon
     buildCommand: pip install -r requirements.txt
@@ -12,3 +12,7 @@ services:
         sync: false
       - key: PYTHON_VERSION
         value: 3.11.7
+    disk:
+      name: protection-data
+      mountPath: /app
+      sizeGB: 1
