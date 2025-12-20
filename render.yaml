@@ -1,10 +1,10 @@
 services:
   - type: web
-    name: protection-bot-go
-    env: go
+    name: protection-bot
+    env: python
     region: oregon
-    buildCommand: go build -o protection-bot
-    startCommand: ./protection-bot
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn protection_bot:app
     envVars:
       - key: LINE_CHANNEL_ACCESS_TOKEN
         sync: false
@@ -14,5 +14,5 @@ services:
         value: 5000
     disk:
       name: protection-data
-      mountPath: /app
+      mountPath: /opt/render/project/src
       sizeGB: 1
