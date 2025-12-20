@@ -1,182 +1,424 @@
-import re
-import time
-from datetime import datetime, timedelta
-from threading import Lock
-from database import Database
+import sqlite3
 import logging
+from threading import Lock
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-class ProtectionManager:
-    def __init__(self, line_bot_api):
-        self.line_bot_api = line_bot_api
-        self.muted_users = {}
-        self.user_messages = {}
-        self.lock = Lock()
-        
-        self.bad_words = [
-            'غبي', 'احمق', 'حمار', 'كلب', 'خنزير', 'قذر', 'وسخ', 'حقير', 'نذل',
-            'خائن', 'كذاب', 'لعين', 'ملعون', 'عاهر', 'زاني', 'فاسق', 'منافق',
-            'حيوان', 'قرد', 'بهيمة', 'ابن', 'بنت'
-        ]
+class Database:
+    DB_NAME = 'protection.db'
+    _lock = Lock()
     
-    def init_group(self, group_id):
-        Database.create_group(group_id)
+    @staticmethod
+    def init():
+        try:
+            conn = sqlite3.connect(Database.DB_NAME)
+            cursor = conn.cursor()
+            
+            cursor.execute('''CREATE TABLE IF NOT EXISTS groups (
+                group_id TEXT PRIMARY KEY,
+                links_protection BOOLEAN DEFAULT 1,
+                spam_protection BOOLEAN DEFAULT 1,
+                flood_protection BOOLEAN DEFAULT 1,
+                bad_words_protection BOOLEAN DEFAULT 1,
+                welcome_enabled BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+            
+            cursor.execute('''CREATE TABLE IF NOT EXISTS owners (
+                user_id TEXT PRIMARY KEY,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+            
+            cursor.execute('''CREATE TABLE IF NOT EXISTS admins (
+                user_id TEXT PRIMARY KEY,
+                added_by TEXT,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+            
+            cursor.execute('''CREATE TABLE IF NOT EXISTS banned_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                banned_by TEXT NOT NULL,
+                reason TEXT,
+                banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(group_id, user_id)
+            )''')
+            
+            cursor.execute('''CREATE TABLE IF NOT EXISTS warnings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                warned_by TEXT NOT NULL,
+                reason TEXT,
+                warned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+            
+            cursor.execute('''CREATE TABLE IF NOT EXISTS action_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                admin_id TEXT NOT NULL,
+                action_type TEXT NOT NULL,
+                reason TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+            
+            conn.commit()
+            conn.close()
+            logger.info("تم تهيئة قاعدة البيانات")
+        except Exception as e:
+            logger.error(f"خطأ تهيئة DB: {e}")
     
-    def normalize_text(self, text):
-        text = text.lower().strip()
-        text = text.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا')
-        text = text.replace('ؤ', 'و').replace('ئ', 'ي').replace('ء', '')
-        text = text.replace('ة', 'ه').replace('ى', 'ي')
-        text = re.sub(r'[\u064B-\u065F]', '', text)
-        return text
-    
-    def check_links(self, text):
-        patterns = [
-            r'http[s]?://',
-            r'www\.',
-            r't\.me',
-            r'line\.me',
-            r'bit\.ly',
-            r'tinyurl',
-            r'\w+\.(com|net|org|me|co|info|tv)'
-        ]
-        
-        for pattern in patterns:
-            if re.search(pattern, text, re.IGNORECASE):
+    @staticmethod
+    def create_group(group_id):
+        with Database._lock:
+            try:
+                conn = sqlite3.connect(Database.DB_NAME)
+                cursor = conn.cursor()
+                cursor.execute('''INSERT OR IGNORE INTO groups (group_id) VALUES (?)''', (group_id,))
+                conn.commit()
+                conn.close()
                 return True
-        return False
+            except Exception as e:
+                logger.error(f"خطأ انشاء قروب: {e}")
+                return False
     
-    def check_bad_words(self, text):
-        normalized = self.normalize_text(text)
-        
-        for word in self.bad_words:
-            norm_word = self.normalize_text(word)
-            if norm_word in normalized:
-                return True
-        return False
-    
-    def check_spam(self, text):
-        if len(text) > 500:
-            return True
-        
-        if text.count('\n') > 10:
-            return True
-        
-        repeated_chars = re.findall(r'(.)\1{4,}', text)
-        if repeated_chars:
-            return True
-        
-        return False
-    
-    def check_flood(self, group_id, user_id):
-        with self.lock:
-            key = f"{group_id}:{user_id}"
-            current_time = time.time()
-            
-            if key not in self.user_messages:
-                self.user_messages[key] = []
-            
-            self.user_messages[key] = [
-                t for t in self.user_messages[key] 
-                if current_time - t < 10
-            ]
-            
-            self.user_messages[key].append(current_time)
-            
-            return len(self.user_messages[key]) > 5
-    
-    def check_message(self, group_id, user_id, text, display_name):
-        settings = self.get_settings(group_id)
-        
-        if settings.get('links', True):
-            if self.check_links(text):
-                self.warn_user(group_id, user_id, "bot", "ارسال روابط")
-                return f"تحذير {display_name}\nممنوع ارسال الروابط"
-        
-        if settings.get('bad_words', True):
-            if self.check_bad_words(text):
-                self.warn_user(group_id, user_id, "bot", "استخدام كلمات غير لائقة")
-                return f"تحذير {display_name}\nممنوع الكلمات غير اللائقة"
-        
-        if settings.get('spam', True):
-            if self.check_spam(text):
-                self.warn_user(group_id, user_id, "bot", "سبام")
-                return f"تحذير {display_name}\nممنوع السبام"
-        
-        if settings.get('flood', True):
-            if self.check_flood(group_id, user_id):
-                self.mute_user(group_id, user_id, 5)
-                return f"تم كتم {display_name} لمدة 5 دقائق\nالسبب: فلود"
-        
-        return None
-    
-    def ban_user(self, group_id, user_id, admin_id, reason):
-        return Database.ban_user(group_id, user_id, admin_id, reason)
-    
-    def unban_user(self, group_id, user_id):
-        return Database.unban_user(group_id, user_id)
-    
-    def is_banned(self, group_id, user_id):
-        return Database.is_banned(group_id, user_id)
-    
-    def get_banned_users(self, group_id):
-        return Database.get_banned_users(group_id)
-    
-    def mute_user(self, group_id, user_id, duration_minutes):
-        with self.lock:
-            key = f"{group_id}:{user_id}"
-            expire_time = datetime.now() + timedelta(minutes=duration_minutes)
-            self.muted_users[key] = expire_time
-            
-            Database.log_action(
-                group_id, user_id, "bot", "mute",
-                f"مكتوم لمدة {duration_minutes} دقيقة"
-            )
-            return True
-    
-    def unmute_user(self, group_id, user_id):
-        with self.lock:
-            key = f"{group_id}:{user_id}"
-            if key in self.muted_users:
-                del self.muted_users[key]
-                return True
+    @staticmethod
+    def is_owner(user_id):
+        try:
+            conn = sqlite3.connect(Database.DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute('SELECT user_id FROM owners WHERE user_id = ?', (user_id,))
+            result = cursor.fetchone()
+            conn.close()
+            return result is not None
+        except Exception as e:
+            logger.error(f"خطأ فحص مالك: {e}")
             return False
     
-    def is_muted(self, group_id, user_id):
-        with self.lock:
-            key = f"{group_id}:{user_id}"
-            if key in self.muted_users:
-                if datetime.now() < self.muted_users[key]:
-                    return True
-                else:
-                    del self.muted_users[key]
+    @staticmethod
+    def is_admin(user_id):
+        try:
+            conn = sqlite3.connect(Database.DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute('SELECT user_id FROM admins WHERE user_id = ?', (user_id,))
+            result = cursor.fetchone()
+            conn.close()
+            return result is not None
+        except Exception as e:
+            logger.error(f"خطأ فحص ادمن: {e}")
             return False
     
-    def cleanup_temp_bans(self):
-        with self.lock:
-            current_time = datetime.now()
-            expired = [
-                key for key, expire_time in self.muted_users.items()
-                if current_time >= expire_time
-            ]
-            for key in expired:
-                del self.muted_users[key]
+    @staticmethod
+    def add_owner(user_id):
+        with Database._lock:
+            try:
+                conn = sqlite3.connect(Database.DB_NAME)
+                cursor = conn.cursor()
+                cursor.execute('''INSERT OR IGNORE INTO owners (user_id) VALUES (?)''', (user_id,))
+                conn.commit()
+                conn.close()
+                return True
+            except Exception as e:
+                logger.error(f"خطأ اضافة مالك: {e}")
+                return False
     
-    def warn_user(self, group_id, user_id, admin_id, reason):
-        return Database.add_warning(group_id, user_id, admin_id, reason)
+    @staticmethod
+    def remove_owner(user_id):
+        with Database._lock:
+            try:
+                conn = sqlite3.connect(Database.DB_NAME)
+                cursor = conn.cursor()
+                cursor.execute('DELETE FROM owners WHERE user_id = ?', (user_id,))
+                conn.commit()
+                conn.close()
+                return True
+            except Exception as e:
+                logger.error(f"خطأ حذف مالك: {e}")
+                return False
     
-    def clear_warnings(self, group_id, user_id):
-        return Database.clear_warnings(group_id, user_id)
+    @staticmethod
+    def add_admin(user_id):
+        with Database._lock:
+            try:
+                conn = sqlite3.connect(Database.DB_NAME)
+                cursor = conn.cursor()
+                cursor.execute('''INSERT OR IGNORE INTO admins (user_id) VALUES (?)''', (user_id,))
+                conn.commit()
+                conn.close()
+                return True
+            except Exception as e:
+                logger.error(f"خطأ اضافة ادمن: {e}")
+                return False
     
-    def get_user_warnings(self, group_id, user_id):
-        return Database.get_user_warnings(group_id, user_id)
+    @staticmethod
+    def remove_admin(user_id):
+        with Database._lock:
+            try:
+                conn = sqlite3.connect(Database.DB_NAME)
+                cursor = conn.cursor()
+                cursor.execute('DELETE FROM admins WHERE user_id = ?', (user_id,))
+                conn.commit()
+                conn.close()
+                return True
+            except Exception as e:
+                logger.error(f"خطأ حذف ادمن: {e}")
+                return False
     
-    def update_settings(self, group_id, setting_name, value):
-        return Database.update_group_settings(group_id, setting_name, value)
+    @staticmethod
+    def get_owners():
+        try:
+            conn = sqlite3.connect(Database.DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute('SELECT user_id, added_at FROM owners')
+            results = cursor.fetchall()
+            conn.close()
+            return [{'user_id': r[0], 'added_at': r[1]} for r in results]
+        except Exception as e:
+            logger.error(f"خطأ جلب مالكين: {e}")
+            return []
     
-    def get_settings(self, group_id):
-        return Database.get_group_settings(group_id)
+    @staticmethod
+    def get_admins():
+        try:
+            conn = sqlite3.connect(Database.DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute('SELECT user_id, added_at FROM admins')
+            results = cursor.fetchall()
+            conn.close()
+            return [{'user_id': r[0], 'added_at': r[1]} for r in results]
+        except Exception as e:
+            logger.error(f"خطأ جلب ادمن: {e}")
+            return []
     
-    def get_group_stats(self, group_id):
-        return Database.get_group_stats(group_id)
+    @staticmethod
+    def ban_user(group_id, user_id, admin_id, reason):
+        with Database._lock:
+            try:
+                conn = sqlite3.connect(Database.DB_NAME)
+                cursor = conn.cursor()
+                cursor.execute('''INSERT OR REPLACE INTO banned_users 
+                    (group_id, user_id, banned_by, reason) VALUES (?, ?, ?, ?)''',
+                    (group_id, user_id, admin_id, reason))
+                conn.commit()
+                conn.close()
+                
+                Database.log_action(group_id, user_id, admin_id, "ban", reason)
+                return True
+            except Exception as e:
+                logger.error(f"خطأ حظر: {e}")
+                return False
+    
+    @staticmethod
+    def unban_user(group_id, user_id):
+        with Database._lock:
+            try:
+                conn = sqlite3.connect(Database.DB_NAME)
+                cursor = conn.cursor()
+                cursor.execute('DELETE FROM banned_users WHERE group_id = ? AND user_id = ?',
+                    (group_id, user_id))
+                deleted = cursor.rowcount > 0
+                conn.commit()
+                conn.close()
+                return deleted
+            except Exception as e:
+                logger.error(f"خطأ الغاء حظر: {e}")
+                return False
+    
+    @staticmethod
+    def is_banned(group_id, user_id):
+        try:
+            conn = sqlite3.connect(Database.DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute('SELECT id FROM banned_users WHERE group_id = ? AND user_id = ?',
+                (group_id, user_id))
+            result = cursor.fetchone()
+            conn.close()
+            return result is not None
+        except Exception as e:
+            logger.error(f"خطأ فحص حظر: {e}")
+            return False
+    
+    @staticmethod
+    def get_banned_users(group_id):
+        try:
+            conn = sqlite3.connect(Database.DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute('''SELECT user_id, reason, banned_at 
+                FROM banned_users WHERE group_id = ? ORDER BY banned_at DESC''',
+                (group_id,))
+            results = cursor.fetchall()
+            conn.close()
+            return [{'user_id': r[0], 'reason': r[1], 'banned_at': r[2]} for r in results]
+        except Exception as e:
+            logger.error(f"خطأ جلب محظورين: {e}")
+            return []
+    
+    @staticmethod
+    def add_warning(group_id, user_id, admin_id, reason):
+        with Database._lock:
+            try:
+                conn = sqlite3.connect(Database.DB_NAME)
+                cursor = conn.cursor()
+                cursor.execute('''INSERT INTO warnings (group_id, user_id, warned_by, reason)
+                    VALUES (?, ?, ?, ?)''', (group_id, user_id, admin_id, reason))
+                
+                cursor.execute('SELECT COUNT(*) FROM warnings WHERE group_id = ? AND user_id = ?',
+                    (group_id, user_id))
+                count = cursor.fetchone()[0]
+                
+                conn.commit()
+                conn.close()
+                
+                Database.log_action(group_id, user_id, admin_id, "warn", reason)
+                return count
+            except Exception as e:
+                logger.error(f"خطأ انذار: {e}")
+                return 0
+    
+    @staticmethod
+    def get_user_warnings(group_id, user_id):
+        try:
+            conn = sqlite3.connect(Database.DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute('SELECT COUNT(*) FROM warnings WHERE group_id = ? AND user_id = ?',
+                (group_id, user_id))
+            count = cursor.fetchone()[0]
+            conn.close()
+            return count
+        except Exception as e:
+            logger.error(f"خطأ جلب انذارات: {e}")
+            return 0
+    
+    @staticmethod
+    def clear_warnings(group_id, user_id):
+        with Database._lock:
+            try:
+                conn = sqlite3.connect(Database.DB_NAME)
+                cursor = conn.cursor()
+                cursor.execute('DELETE FROM warnings WHERE group_id = ? AND user_id = ?',
+                    (group_id, user_id))
+                conn.commit()
+                conn.close()
+                return True
+            except Exception as e:
+                logger.error(f"خطأ حذف انذارات: {e}")
+                return False
+    
+    @staticmethod
+    def cleanup_warnings():
+        with Database._lock:
+            try:
+                conn = sqlite3.connect(Database.DB_NAME)
+                cursor = conn.cursor()
+                cutoff = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')
+                cursor.execute('DELETE FROM warnings WHERE warned_at < ?', (cutoff,))
+                conn.commit()
+                conn.close()
+                return True
+            except Exception as e:
+                logger.error(f"خطأ تنظيف: {e}")
+                return False
+    
+    @staticmethod
+    def update_group_settings(group_id, setting, value):
+        with Database._lock:
+            try:
+                conn = sqlite3.connect(Database.DB_NAME)
+                cursor = conn.cursor()
+                
+                setting_map = {
+                    'links': 'links_protection',
+                    'spam': 'spam_protection',
+                    'flood': 'flood_protection',
+                    'bad_words': 'bad_words_protection',
+                    'welcome': 'welcome_enabled'
+                }
+                
+                column = setting_map.get(setting)
+                if not column:
+                    return False
+                
+                cursor.execute(f'UPDATE groups SET {column} = ? WHERE group_id = ?',
+                    (1 if value else 0, group_id))
+                conn.commit()
+                conn.close()
+                return True
+            except Exception as e:
+                logger.error(f"خطأ تحديث اعدادات: {e}")
+                return False
+    
+    @staticmethod
+    def get_group_settings(group_id):
+        try:
+            conn = sqlite3.connect(Database.DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute('''SELECT links_protection, spam_protection, flood_protection,
+                bad_words_protection, welcome_enabled FROM groups WHERE group_id = ?''',
+                (group_id,))
+            result = cursor.fetchone()
+            conn.close()
+            
+            if result:
+                return {
+                    'links': bool(result[0]),
+                    'spam': bool(result[1]),
+                    'flood': bool(result[2]),
+                    'bad_words': bool(result[3]),
+                    'welcome': bool(result[4])
+                }
+            return {
+                'links': True,
+                'spam': True,
+                'flood': True,
+                'bad_words': True,
+                'welcome': True
+            }
+        except Exception as e:
+            logger.error(f"خطأ جلب اعدادات: {e}")
+            return {}
+    
+    @staticmethod
+    def log_action(group_id, user_id, admin_id, action_type, reason):
+        with Database._lock:
+            try:
+                conn = sqlite3.connect(Database.DB_NAME)
+                cursor = conn.cursor()
+                cursor.execute('''INSERT INTO action_logs 
+                    (group_id, user_id, admin_id, action_type, reason)
+                    VALUES (?, ?, ?, ?, ?)''',
+                    (group_id, user_id, admin_id, action_type, reason))
+                conn.commit()
+                conn.close()
+                return True
+            except Exception as e:
+                logger.error(f"خطأ تسجيل: {e}")
+                return False
+    
+    @staticmethod
+    def get_group_stats(group_id):
+        try:
+            conn = sqlite3.connect(Database.DB_NAME)
+            cursor = conn.cursor()
+            
+            cursor.execute('SELECT COUNT(*) FROM banned_users WHERE group_id = ?', (group_id,))
+            banned_count = cursor.fetchone()[0]
+            
+            cursor.execute('SELECT COUNT(*) FROM warnings WHERE group_id = ?', (group_id,))
+            warnings_count = cursor.fetchone()[0]
+            
+            cursor.execute('SELECT COUNT(*) FROM action_logs WHERE group_id = ?', (group_id,))
+            actions_count = cursor.fetchone()[0]
+            
+            conn.close()
+            
+            return {
+                'banned': banned_count,
+                'warnings': warnings_count,
+                'actions': actions_count
+            }
+        except Exception as e:
+            logger.error(f"خطأ احصائيات: {e}")
+            return {}
