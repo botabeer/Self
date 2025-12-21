@@ -1,214 +1,134 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AuthService - خدمة المصادقة وتسجيل الدخول
+AgeCheckService - خدمة التحقق من العمر
 متوافق مع LINE Messaging API v3
 """
 
-import hashlib
-import secrets
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 from linebot.v3.messaging import MessagingApi, ApiClient
 
-class AuthService:
-    """خدمة المصادقة والتسجيل"""
+class AgeCheckService:
+    """خدمة التحقق من العمر"""
+    
+    # أنواع مشغلي الشبكات
+    CARRIER_DOCOMO = 1
+    CARRIER_AU = 2
+    CARRIER_SOFTBANK = 3
+    CARRIER_LINE_MOBILE = 4
     
     def __init__(self, api: MessagingApi):
         self.api = api
-        self.sessions = {}
-        self.e2ee_requests = {}
+        self.age_records = {}
+        self.tokens = {}
     
-    def loginZ(self, login_request: dict) -> dict:
+    def checkUserAge(self, carrier: int, session_id: str, 
+                     verifier: str, standard_age: int) -> int:
         """
-        تسجيل الدخول
-        
-        Args:
-            login_request: {
-                'identifier': 'email/phone',
-                'password': 'hashed_password',
-                'deviceName': 'device_name'
-            }
+        التحقق من عمر المستخدم عبر مشغل الشبكة
         
         Returns:
-            dict: نتيجة تسجيل الدخول
+            0 = لم يتم التحقق
+            1 = أقل من العمر المطلوب
+            2 = أكبر من أو يساوي العمر المطلوب
         """
-        identifier = login_request.get('identifier')
-        password = login_request.get('password')
+        # محاكاة التحقق من العمر
+        user_age = self._verify_with_carrier(carrier, session_id, verifier)
         
-        # التحقق من بيانات الاعتماد
-        if not self._verify_credentials(identifier, password):
-            raise Exception("بيانات الدخول خاطئة")
+        if user_age is None:
+            return 0  # فشل التحقق
         
-        # إنشاء جلسة
-        auth_token = self._generate_token()
-        session_id = self._create_session(identifier, auth_token)
-        
-        return {
-            'authToken': auth_token,
-            'sessionId': session_id,
-            'expiresIn': 3600,  # ساعة واحدة
-            'userId': self._get_user_id(identifier),
-            'loginTime': datetime.now().isoformat()
-        }
-    
-    def logoutZ(self):
-        """تسجيل الخروج"""
-        # حذف جميع الجلسات النشطة
-        self.sessions.clear()
-        print("✅ تم تسجيل الخروج بنجاح")
-    
-    def normalizePhoneNumber(self, country_code: str, phone_number: str,
-                            country_code_hint: str = '') -> str:
-        """
-        تنسيق رقم الهاتف بالصيغة الدولية
-        
-        Returns:
-            str: رقم الهاتف المنسق
-        """
-        # إزالة الرموز الخاصة
-        clean_number = ''.join(filter(str.isdigit, phone_number))
-        
-        # إضافة كود الدولة
-        if not clean_number.startswith(country_code):
-            clean_number = f"{country_code}{clean_number}"
-        
-        return f"+{clean_number}"
-    
-    def respondE2EELoginRequest(self, verifier: str, public_key: dict,
-                               encrypted_key_chain: bytes,
-                               hash_key_chain: bytes, error_code: int):
-        """
-        الرد على طلب تسجيل دخول E2EE (التشفير من طرف لطرف)
-        """
-        if error_code != 0:
-            raise Exception(f"خطأ في E2EE: {error_code}")
-        
-        self.e2ee_requests[verifier] = {
-            'publicKey': public_key,
-            'encryptedKeyChain': encrypted_key_chain,
-            'hashKeyChain': hash_key_chain,
+        # حفظ النتيجة
+        self.age_records[session_id] = {
+            'age': user_age,
+            'carrier': carrier,
+            'verified': True,
             'timestamp': datetime.now()
         }
         
-        print(f"✅ تم حفظ طلب E2EE: {verifier}")
+        return 2 if user_age >= standard_age else 1
     
-    def confirmE2EELogin(self, verifier: str, device_secret: bytes) -> str:
+    def checkUserAgeWithDocomo(self, openid_redirect_url: str, 
+                              standard_age: int, verifier: str) -> dict:
         """
-        تأكيد تسجيل الدخول E2EE
+        التحقق من العمر عبر Docomo OpenID
         
         Returns:
-            str: رمز المصادقة
+            dict: نتيجة التحقق
         """
-        if verifier not in self.e2ee_requests:
-            raise Exception("طلب E2EE غير موجود")
+        result = {
+            'authUrl': f"{openid_redirect_url}?verifier={verifier}",
+            'sessionId': f"docomo_{verifier[:8]}",
+            'standardAge': standard_age
+        }
         
-        # التحقق من device_secret
-        auth_token = self._generate_token()
-        
-        # حذف الطلب بعد التأكيد
-        del self.e2ee_requests[verifier]
-        
-        return auth_token
+        print(f"🔗 Docomo Auth URL: {result['authUrl']}")
+        return result
     
-    def verifyQrcodeWithE2EE(self, verifier: str, pin_code: str,
-                            error_code: int, public_key: dict,
-                            encrypted_key_chain: bytes,
-                            hash_key_chain: bytes) -> str:
+    def retrieveOpenIdAuthUrlWithDocomo(self) -> str:
         """
-        التحقق من QR Code مع E2EE
-        
-        Returns:
-            str: نتيجة التحقق
+        الحصول على رابط المصادقة عبر Docomo OpenID
         """
-        if error_code != 0:
-            raise Exception(f"خطأ في التحقق: {error_code}")
-        
-        # التحقق من رمز PIN
-        if not self._verify_pin(pin_code):
-            raise Exception("رمز PIN خاطئ")
-        
-        # إنشاء رمز تحقق
-        verification_token = self._generate_token()
-        
-        return verification_token
+        auth_url = "https://id.smt.docomo.ne.jp/cgi8/oidc/authorize"
+        return f"{auth_url}?response_type=code&scope=openid+age"
     
-    def issueTokenForAccountMigration(self, migration_session_id: str) -> dict:
+    def retrieveRequestToken(self, carrier: int) -> dict:
         """
-        إصدار رمز لنقل الحساب
+        الحصول على رمز الطلب للتحقق من العمر
         
         Returns:
             dict: معلومات الرمز
         """
-        token = self._generate_token()
+        token = f"AGE_TOKEN_{carrier}_{datetime.now().timestamp()}"
         
-        return {
-            'migrationToken': token,
-            'sessionId': migration_session_id,
-            'expiresAt': (datetime.now() + timedelta(hours=24)).isoformat(),
-            'url': f"line://migrate?token={token}"
-        }
-    
-    def issueTokenForAccountMigrationSettings(self, enforce: bool) -> dict:
-        """
-        إصدار رمز لإعدادات نقل الحساب
-        """
-        token = self._generate_token()
-        
-        return {
-            'settingsToken': token,
-            'enforce': enforce,
-            'expiresAt': (datetime.now() + timedelta(hours=1)).isoformat()
-        }
-    
-    def _verify_credentials(self, identifier: str, password: str) -> bool:
-        """التحقق من بيانات الاعتماد (محاكاة)"""
-        # في الواقع، يتم التحقق من قاعدة البيانات
-        return True
-    
-    def _generate_token(self) -> str:
-        """إنشاء رمز عشوائي آمن"""
-        return secrets.token_urlsafe(32)
-    
-    def _create_session(self, identifier: str, token: str) -> str:
-        """إنشاء جلسة جديدة"""
-        session_id = hashlib.sha256(
-            f"{identifier}{token}".encode()
-        ).hexdigest()[:16]
-        
-        self.sessions[session_id] = {
-            'identifier': identifier,
-            'token': token,
+        self.tokens[token] = {
+            'carrier': carrier,
             'created': datetime.now(),
-            'expires': datetime.now() + timedelta(hours=1)
+            'used': False
         }
         
-        return session_id
+        return {
+            'requestToken': token,
+            'returnUrl': f"line://age/verify?token={token}",
+            'carrier': self._get_carrier_name(carrier)
+        }
     
-    def _get_user_id(self, identifier: str) -> str:
-        """الحصول على معرف المستخدم"""
-        return hashlib.md5(identifier.encode()).hexdigest()[:10]
+    def _verify_with_carrier(self, carrier: int, session_id: str, 
+                            verifier: str) -> Optional[int]:
+        """التحقق من العمر مع مشغل الشبكة (محاكاة)"""
+        # في الواقع، هذا يتصل بـ API المشغل
+        # هنا نرجع عمر افتراضي للاختبار
+        return 20
     
-    def _verify_pin(self, pin_code: str) -> bool:
-        """التحقق من رمز PIN"""
-        return len(pin_code) == 4 and pin_code.isdigit()
+    def _get_carrier_name(self, carrier: int) -> str:
+        """الحصول على اسم المشغل"""
+        carriers = {
+            1: 'Docomo',
+            2: 'AU',
+            3: 'Softbank',
+            4: 'LINE Mobile'
+        }
+        return carriers.get(carrier, 'Unknown')
 
 # ============ مثال الاستخدام ============
 if __name__ == '__main__':
     api = MessagingApi(ApiClient())
-    service = AuthService(api)
+    service = AgeCheckService(api)
     
-    # تسجيل الدخول
-    result = service.loginZ({
-        'identifier': 'user@example.com',
-        'password': 'hashed_password',
-        'deviceName': 'iPhone 15'
-    })
-    print(f"🔐 تم تسجيل الدخول: {result['authToken'][:20]}...")
+    # الحصول على رمز الطلب
+    token_info = service.retrieveRequestToken(
+        carrier=AgeCheckService.CARRIER_LINE_MOBILE
+    )
+    print(f"🎫 Token: {token_info['requestToken']}")
     
-    # تنسيق رقم هاتف
-    phone = service.normalizePhoneNumber('966', '512345678')
-    print(f"📱 الرقم المنسق: {phone}")
+    # التحقق من العمر
+    result = service.checkUserAge(
+        carrier=AgeCheckService.CARRIER_LINE_MOBILE,
+        session_id='test_session',
+        verifier='test_verifier',
+        standard_age=18
+    )
     
-    # تسجيل الخروج
-    service.logoutZ()
+    status = {0: 'فشل', 1: 'أقل من 18', 2: 'مؤهل ✅'}
+    print(f"📊 النتيجة: {status[result]}")
