@@ -3,11 +3,17 @@ from akad.ttypes import ApplicationType
 import re
 
 class Config(object):
+    """
+    فئة التكوين التي تحتوي على جميع الإعدادات والثوابت لمكتبة LINE
+    """
+    
+    # نطاقات الخوادم الرئيسية
     LINE_HOST_DOMAIN            = 'https://gd2.line.naver.jp'
     LINE_OBS_DOMAIN             = 'https://obs-sg.line-apps.com'
     LINE_TIMELINE_API           = 'https://gd2.line.naver.jp/mh/api'
     LINE_TIMELINE_MH            = 'https://gd2.line.naver.jp/mh'
 
+    # مسارات الاستعلام للخدمات المختلفة
     LINE_LOGIN_QUERY_PATH       = '/api/v4p/rs'
     LINE_AUTH_QUERY_PATH        = '/api/v4/TalkService.do'
 
@@ -18,6 +24,7 @@ class Config(object):
     LINE_CHAN_QUERY_PATH        = '/CH4'
     LINE_SQUARE_QUERY_PATH      = '/SQS1'
 
+    # معرفات القنوات الرسمية
     CHANNEL_ID = {
         'LINE_TIMELINE': '1341209850',
         'LINE_WEBTOON': '1401600689',
@@ -27,6 +34,7 @@ class Config(object):
         'LINE_SERVICES': '1459630796'
     }
 
+    # إعدادات التطبيق والنظام
     APP_TYPE    = ApplicationType._VALUES_TO_NAMES[368]
     APP_VER     = '2.1.5'
     CARRIER     = '51089, 1-0'
@@ -36,5 +44,8 @@ class Config(object):
     EMAIL_REGEX = re.compile(r"[^@]+@[^@]+\.[^@]+")
 
     def __init__(self):
+        """
+        تهيئة التكوين وإنشاء اسم التطبيق ووكيل المستخدم
+        """
         self.APP_NAME = '%s\t%s\t%s\t%s' % (self.APP_TYPE, self.APP_VER, self.SYSTEM_NAME, self.SYSTEM_VER)
         self.USER_AGENT = 'Line/%s' % self.APP_VER
