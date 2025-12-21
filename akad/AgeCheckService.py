@@ -1,369 +1,214 @@
-#
-# خدمة التحقق من العمر - LINE Messaging API v3
-# معرب مع أوامر بالإنجليزية
-#
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+AuthService - خدمة المصادقة وتسجيل الدخول
+متوافق مع LINE Messaging API v3
+"""
 
-from thrift.Thrift import TType, TMessageType, TException, TApplicationException
-from thrift.protocol.TProtocol import TProtocolException
-from thrift.TRecursive import fix_spec
-import sys, logging
-from .ttypes import *
-from thrift.Thrift import TProcessor
-from thrift.transport import TTransport
+import hashlib
+import secrets
+from typing import Optional
+from datetime import datetime, timedelta
+from linebot.v3.messaging import MessagingApi, ApiClient
 
-الهياكل_كاملة = []
-
-class واجهة(object):
-    """واجهة خدمة التحقق من عمر المستخدم"""
+class AuthService:
+    """خدمة المصادقة والتسجيل"""
     
-    def checkUserAge(self, carrier, sessionId, verifier, standardAge):
-        """التحقق من عمر المستخدم"""
-        pass
-
-    def checkUserAgeWithDocomo(self, openIdRedirectUrl, standardAge, verifier):
-        """التحقق من العمر عبر Docomo"""
-        pass
-
-    def retrieveOpenIdAuthUrlWithDocomo(self):
-        """استرجاع رابط مصادقة OpenID مع Docomo"""
-        pass
-
-    def retrieveRequestToken(self, carrier):
-        """استرجاع رمز الطلب"""
-        pass
-
-
-class عميل(واجهة):
-    """عميل خدمة التحقق من العمر"""
+    def __init__(self, api: MessagingApi):
+        self.api = api
+        self.sessions = {}
+        self.e2ee_requests = {}
     
-    def __init__(self, iprot, oprot=None):
-        self._iprot = self._oprot = iprot
-        if oprot: self._oprot = oprot
-        self._seqid = 0
-
-    def checkUserAge(self, c, sid, v, age):
-        self._ارسل_تحقق_عمر(c, sid, v, age)
-        return self._استقبل_تحقق_عمر()
-
-    def _ارسل_تحقق_عمر(self, c, sid, v, age):
-        self._oprot.writeMessageBegin('checkUserAge', TMessageType.CALL, self._seqid)
-        معاملات = معاملات_تحقق_عمر()
-        معاملات.carrier = c
-        معاملات.sessionId = sid
-        معاملات.verifier = v
-        معاملات.standardAge = age
-        معاملات.write(self._oprot)
-        self._oprot.writeMessageEnd()
-        self._oprot.trans.flush()
-
-    def _استقبل_تحقق_عمر(self):
-        iprot = self._iprot
-        (fname, mtype, rseqid) = iprot.readMessageBegin()
-        if mtype == TMessageType.EXCEPTION:
-            x = TApplicationException()
-            x.read(iprot)
-            iprot.readMessageEnd()
-            raise x
-        نتيجة = نتيجة_تحقق_عمر()
-        نتيجة.read(iprot)
-        iprot.readMessageEnd()
-        if نتيجة.success is not None: return نتيجة.success
-        if نتيجة.e is not None: raise نتيجة.e
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "فشل التحقق من العمر")
-
-    def checkUserAgeWithDocomo(self, url, age, v):
-        self._ارسل_تحقق_عمر_دوكومو(url, age, v)
-        return self._استقبل_تحقق_عمر_دوكومو()
-
-    def _ارسل_تحقق_عمر_دوكومو(self, url, age, v):
-        self._oprot.writeMessageBegin('checkUserAgeWithDocomo', TMessageType.CALL, self._seqid)
-        معاملات = معاملات_تحقق_عمر_دوكومو()
-        معاملات.openIdRedirectUrl = url
-        معاملات.standardAge = age
-        معاملات.verifier = v
-        معاملات.write(self._oprot)
-        self._oprot.writeMessageEnd()
-        self._oprot.trans.flush()
-
-    def _استقبل_تحقق_عمر_دوكومو(self):
-        iprot = self._iprot
-        (fname, mtype, rseqid) = iprot.readMessageBegin()
-        if mtype == TMessageType.EXCEPTION:
-            x = TApplicationException()
-            x.read(iprot)
-            iprot.readMessageEnd()
-            raise x
-        نتيجة = نتيجة_تحقق_عمر_دوكومو()
-        نتيجة.read(iprot)
-        iprot.readMessageEnd()
-        if نتيجة.success is not None: return نتيجة.success
-        if نتيجة.e is not None: raise نتيجة.e
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "فشل التحقق من العمر عبر دوكومو")
-
-    def retrieveOpenIdAuthUrlWithDocomo(self):
-        self._ارسل_استرجاع_رابط_دوكومو()
-        return self._استقبل_استرجاع_رابط_دوكومو()
-
-    def _ارسل_استرجاع_رابط_دوكومو(self):
-        self._oprot.writeMessageBegin('retrieveOpenIdAuthUrlWithDocomo', TMessageType.CALL, self._seqid)
-        معاملات = معاملات_استرجاع_رابط_دوكومو()
-        معاملات.write(self._oprot)
-        self._oprot.writeMessageEnd()
-        self._oprot.trans.flush()
-
-    def _استقبل_استرجاع_رابط_دوكومو(self):
-        iprot = self._iprot
-        (fname, mtype, rseqid) = iprot.readMessageBegin()
-        if mtype == TMessageType.EXCEPTION:
-            x = TApplicationException()
-            x.read(iprot)
-            iprot.readMessageEnd()
-            raise x
-        نتيجة = نتيجة_استرجاع_رابط_دوكومو()
-        نتيجة.read(iprot)
-        iprot.readMessageEnd()
-        if نتيجة.success is not None: return نتيجة.success
-        if نتيجة.e is not None: raise نتيجة.e
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "فشل استرجاع رابط دوكومو")
-
-    def retrieveRequestToken(self, carrier):
-        self._ارسل_استرجاع_رمز(carrier)
-        return self._استقبل_استرجاع_رمز()
-
-    def _ارسل_استرجاع_رمز(self, c):
-        self._oprot.writeMessageBegin('retrieveRequestToken', TMessageType.CALL, self._seqid)
-        معاملات = معاملات_استرجاع_رمز()
-        معاملات.carrier = c
-        معاملات.write(self._oprot)
-        self._oprot.writeMessageEnd()
-        self._oprot.trans.flush()
-
-    def _استقبل_استرجاع_رمز(self):
-        iprot = self._iprot
-        (fname, mtype, rseqid) = iprot.readMessageBegin()
-        if mtype == TMessageType.EXCEPTION:
-            x = TApplicationException()
-            x.read(iprot)
-            iprot.readMessageEnd()
-            raise x
-        نتيجة = نتيجة_استرجاع_رمز()
-        نتيجة.read(iprot)
-        iprot.readMessageEnd()
-        if نتيجة.success is not None: return نتيجة.success
-        if نتيجة.e is not None: raise نتيجة.e
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "فشل استرجاع الرمز")
-
-
-class معالج(واجهة, TProcessor):
-    """معالج طلبات الخدمة"""
-    
-    def __init__(self, handler):
-        self._handler = handler
-        self._processMap = {
-            "checkUserAge": معالج.process_checkUserAge,
-            "checkUserAgeWithDocomo": معالج.process_checkUserAgeWithDocomo,
-            "retrieveOpenIdAuthUrlWithDocomo": معالج.process_retrieveOpenIdAuthUrlWithDocomo,
-            "retrieveRequestToken": معالج.process_retrieveRequestToken
+    def loginZ(self, login_request: dict) -> dict:
+        """
+        تسجيل الدخول
+        
+        Args:
+            login_request: {
+                'identifier': 'email/phone',
+                'password': 'hashed_password',
+                'deviceName': 'device_name'
+            }
+        
+        Returns:
+            dict: نتيجة تسجيل الدخول
+        """
+        identifier = login_request.get('identifier')
+        password = login_request.get('password')
+        
+        # التحقق من بيانات الاعتماد
+        if not self._verify_credentials(identifier, password):
+            raise Exception("بيانات الدخول خاطئة")
+        
+        # إنشاء جلسة
+        auth_token = self._generate_token()
+        session_id = self._create_session(identifier, auth_token)
+        
+        return {
+            'authToken': auth_token,
+            'sessionId': session_id,
+            'expiresIn': 3600,  # ساعة واحدة
+            'userId': self._get_user_id(identifier),
+            'loginTime': datetime.now().isoformat()
         }
-
-    def process(self, iprot, oprot):
-        (name, type, seqid) = iprot.readMessageBegin()
-        if name not in self._processMap:
-            iprot.skip(TType.STRUCT)
-            iprot.readMessageEnd()
-            x = TApplicationException(TApplicationException.UNKNOWN_METHOD, f'دالة غير معروفة: {name}')
-            oprot.writeMessageBegin(name, TMessageType.EXCEPTION, seqid)
-            x.write(oprot)
-            oprot.writeMessageEnd()
-            oprot.trans.flush()
-            return
-        self._processMap[name](self, seqid, iprot, oprot)
-        return True
-
-    def process_checkUserAge(self, seqid, iprot, oprot):
-        معاملات = معاملات_تحقق_عمر()
-        معاملات.read(iprot)
-        iprot.readMessageEnd()
-        نتيجة = نتيجة_تحقق_عمر()
-        try:
-            نتيجة.success = self._handler.checkUserAge(معاملات.carrier, معاملات.sessionId, معاملات.verifier, معاملات.standardAge)
-            msg_type = TMessageType.REPLY
-        except TTransport.TTransportException:
-            raise
-        except TalkException as e:
-            msg_type = TMessageType.REPLY
-            نتيجة.e = e
-        except TApplicationException as ex:
-            logging.exception('استثناء TApplication في المعالج')
-            msg_type = TMessageType.EXCEPTION
-            نتيجة = ex
-        except Exception:
-            logging.exception('استثناء غير متوقع في المعالج')
-            msg_type = TMessageType.EXCEPTION
-            نتيجة = TApplicationException(TApplicationException.INTERNAL_ERROR, 'خطأ داخلي')
-        oprot.writeMessageBegin("checkUserAge", msg_type, seqid)
-        نتيجة.write(oprot)
-        oprot.writeMessageEnd()
-        oprot.trans.flush()
-
-    def process_checkUserAgeWithDocomo(self, seqid, iprot, oprot):
-        معاملات = معاملات_تحقق_عمر_دوكومو()
-        معاملات.read(iprot)
-        iprot.readMessageEnd()
-        نتيجة = نتيجة_تحقق_عمر_دوكومو()
-        try:
-            نتيجة.success = self._handler.checkUserAgeWithDocomo(معاملات.openIdRedirectUrl, معاملات.standardAge, معاملات.verifier)
-            msg_type = TMessageType.REPLY
-        except TTransport.TTransportException:
-            raise
-        except TalkException as e:
-            msg_type = TMessageType.REPLY
-            نتيجة.e = e
-        except Exception:
-            logging.exception('خطأ في المعالج')
-            msg_type = TMessageType.EXCEPTION
-            نتيجة = TApplicationException(TApplicationException.INTERNAL_ERROR, 'خطأ داخلي')
-        oprot.writeMessageBegin("checkUserAgeWithDocomo", msg_type, seqid)
-        نتيجة.write(oprot)
-        oprot.writeMessageEnd()
-        oprot.trans.flush()
-
-    def process_retrieveOpenIdAuthUrlWithDocomo(self, seqid, iprot, oprot):
-        معاملات = معاملات_استرجاع_رابط_دوكومو()
-        معاملات.read(iprot)
-        iprot.readMessageEnd()
-        نتيجة = نتيجة_استرجاع_رابط_دوكومو()
-        try:
-            نتيجة.success = self._handler.retrieveOpenIdAuthUrlWithDocomo()
-            msg_type = TMessageType.REPLY
-        except TTransport.TTransportException:
-            raise
-        except TalkException as e:
-            msg_type = TMessageType.REPLY
-            نتيجة.e = e
-        except Exception:
-            logging.exception('خطأ في المعالج')
-            msg_type = TMessageType.EXCEPTION
-            نتيجة = TApplicationException(TApplicationException.INTERNAL_ERROR, 'خطأ داخلي')
-        oprot.writeMessageBegin("retrieveOpenIdAuthUrlWithDocomo", msg_type, seqid)
-        نتيجة.write(oprot)
-        oprot.writeMessageEnd()
-        oprot.trans.flush()
-
-    def process_retrieveRequestToken(self, seqid, iprot, oprot):
-        معاملات = معاملات_استرجاع_رمز()
-        معاملات.read(iprot)
-        iprot.readMessageEnd()
-        نتيجة = نتيجة_استرجاع_رمز()
-        try:
-            نتيجة.success = self._handler.retrieveRequestToken(معاملات.carrier)
-            msg_type = TMessageType.REPLY
-        except TTransport.TTransportException:
-            raise
-        except TalkException as e:
-            msg_type = TMessageType.REPLY
-            نتيجة.e = e
-        except Exception:
-            logging.exception('خطأ في المعالج')
-            msg_type = TMessageType.EXCEPTION
-            نتيجة = TApplicationException(TApplicationException.INTERNAL_ERROR, 'خطأ داخلي')
-        oprot.writeMessageBegin("retrieveRequestToken", msg_type, seqid)
-        نتيجة.write(oprot)
-        oprot.writeMessageEnd()
-        oprot.trans.flush()
-
-
-# الهياكل المساعدة
-class معاملات_تحقق_عمر(object):
-    def __init__(self, carrier=None, sessionId=None, verifier=None, standardAge=None):
-        self.carrier = carrier
-        self.sessionId = sessionId
-        self.verifier = verifier
-        self.standardAge = standardAge
-
-    def read(self, iprot):
-        if iprot._fast_decode: return iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
-        iprot.readStructBegin()
-        while True:
-            (fname, ftype, fid) = iprot.readFieldBegin()
-            if ftype == TType.STOP: break
-            if fid == 2 and ftype == TType.I32: self.carrier = iprot.readI32()
-            elif fid == 3 and ftype == TType.STRING: self.sessionId = iprot.readString().decode('utf-8') if sys.version_info[0] == 2 else iprot.readString()
-            elif fid == 4 and ftype == TType.STRING: self.verifier = iprot.readString().decode('utf-8') if sys.version_info[0] == 2 else iprot.readString()
-            elif fid == 5 and ftype == TType.I32: self.standardAge = iprot.readI32()
-            else: iprot.skip(ftype)
-            iprot.readFieldEnd()
-        iprot.readStructEnd()
-
-    def write(self, oprot):
-        if oprot._fast_encode: return oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
-        oprot.writeStructBegin('checkUserAge_args')
-        if self.carrier is not None:
-            oprot.writeFieldBegin('carrier', TType.I32, 2)
-            oprot.writeI32(self.carrier)
-            oprot.writeFieldEnd()
-        if self.sessionId is not None:
-            oprot.writeFieldBegin('sessionId', TType.STRING, 3)
-            oprot.writeString(self.sessionId.encode('utf-8') if sys.version_info[0] == 2 else self.sessionId)
-            oprot.writeFieldEnd()
-        if self.verifier is not None:
-            oprot.writeFieldBegin('verifier', TType.STRING, 4)
-            oprot.writeString(self.verifier.encode('utf-8') if sys.version_info[0] == 2 else self.verifier)
-            oprot.writeFieldEnd()
-        if self.standardAge is not None:
-            oprot.writeFieldBegin('standardAge', TType.I32, 5)
-            oprot.writeI32(self.standardAge)
-            oprot.writeFieldEnd()
-        oprot.writeFieldStop()
-        oprot.writeStructEnd()
-
-class نتيجة_تحقق_عمر(object):
-    def __init__(self, success=None, e=None):
-        self.success = success
-        self.e = e
-
-class معاملات_تحقق_عمر_دوكومو(object):
-    def __init__(self, openIdRedirectUrl=None, standardAge=None, verifier=None):
-        self.openIdRedirectUrl = openIdRedirectUrl
-        self.standardAge = standardAge
-        self.verifier = verifier
-
-class نتيجة_تحقق_عمر_دوكومو(object):
-    def __init__(self, success=None, e=None):
-        self.success = success
-        self.e = e
-
-class معاملات_استرجاع_رابط_دوكومو(object):
-    def read(self, iprot):
-        if iprot._fast_decode: return iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
-        iprot.readStructBegin()
-        while True:
-            (fname, ftype, fid) = iprot.readFieldBegin()
-            if ftype == TType.STOP: break
-            iprot.skip(ftype)
-            iprot.readFieldEnd()
-        iprot.readStructEnd()
     
-    def write(self, oprot):
-        if oprot._fast_encode: return oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
-        oprot.writeStructBegin('retrieveOpenIdAuthUrlWithDocomo_args')
-        oprot.writeFieldStop()
-        oprot.writeStructEnd()
+    def logoutZ(self):
+        """تسجيل الخروج"""
+        # حذف جميع الجلسات النشطة
+        self.sessions.clear()
+        print("✅ تم تسجيل الخروج بنجاح")
+    
+    def normalizePhoneNumber(self, country_code: str, phone_number: str,
+                            country_code_hint: str = '') -> str:
+        """
+        تنسيق رقم الهاتف بالصيغة الدولية
+        
+        Returns:
+            str: رقم الهاتف المنسق
+        """
+        # إزالة الرموز الخاصة
+        clean_number = ''.join(filter(str.isdigit, phone_number))
+        
+        # إضافة كود الدولة
+        if not clean_number.startswith(country_code):
+            clean_number = f"{country_code}{clean_number}"
+        
+        return f"+{clean_number}"
+    
+    def respondE2EELoginRequest(self, verifier: str, public_key: dict,
+                               encrypted_key_chain: bytes,
+                               hash_key_chain: bytes, error_code: int):
+        """
+        الرد على طلب تسجيل دخول E2EE (التشفير من طرف لطرف)
+        """
+        if error_code != 0:
+            raise Exception(f"خطأ في E2EE: {error_code}")
+        
+        self.e2ee_requests[verifier] = {
+            'publicKey': public_key,
+            'encryptedKeyChain': encrypted_key_chain,
+            'hashKeyChain': hash_key_chain,
+            'timestamp': datetime.now()
+        }
+        
+        print(f"✅ تم حفظ طلب E2EE: {verifier}")
+    
+    def confirmE2EELogin(self, verifier: str, device_secret: bytes) -> str:
+        """
+        تأكيد تسجيل الدخول E2EE
+        
+        Returns:
+            str: رمز المصادقة
+        """
+        if verifier not in self.e2ee_requests:
+            raise Exception("طلب E2EE غير موجود")
+        
+        # التحقق من device_secret
+        auth_token = self._generate_token()
+        
+        # حذف الطلب بعد التأكيد
+        del self.e2ee_requests[verifier]
+        
+        return auth_token
+    
+    def verifyQrcodeWithE2EE(self, verifier: str, pin_code: str,
+                            error_code: int, public_key: dict,
+                            encrypted_key_chain: bytes,
+                            hash_key_chain: bytes) -> str:
+        """
+        التحقق من QR Code مع E2EE
+        
+        Returns:
+            str: نتيجة التحقق
+        """
+        if error_code != 0:
+            raise Exception(f"خطأ في التحقق: {error_code}")
+        
+        # التحقق من رمز PIN
+        if not self._verify_pin(pin_code):
+            raise Exception("رمز PIN خاطئ")
+        
+        # إنشاء رمز تحقق
+        verification_token = self._generate_token()
+        
+        return verification_token
+    
+    def issueTokenForAccountMigration(self, migration_session_id: str) -> dict:
+        """
+        إصدار رمز لنقل الحساب
+        
+        Returns:
+            dict: معلومات الرمز
+        """
+        token = self._generate_token()
+        
+        return {
+            'migrationToken': token,
+            'sessionId': migration_session_id,
+            'expiresAt': (datetime.now() + timedelta(hours=24)).isoformat(),
+            'url': f"line://migrate?token={token}"
+        }
+    
+    def issueTokenForAccountMigrationSettings(self, enforce: bool) -> dict:
+        """
+        إصدار رمز لإعدادات نقل الحساب
+        """
+        token = self._generate_token()
+        
+        return {
+            'settingsToken': token,
+            'enforce': enforce,
+            'expiresAt': (datetime.now() + timedelta(hours=1)).isoformat()
+        }
+    
+    def _verify_credentials(self, identifier: str, password: str) -> bool:
+        """التحقق من بيانات الاعتماد (محاكاة)"""
+        # في الواقع، يتم التحقق من قاعدة البيانات
+        return True
+    
+    def _generate_token(self) -> str:
+        """إنشاء رمز عشوائي آمن"""
+        return secrets.token_urlsafe(32)
+    
+    def _create_session(self, identifier: str, token: str) -> str:
+        """إنشاء جلسة جديدة"""
+        session_id = hashlib.sha256(
+            f"{identifier}{token}".encode()
+        ).hexdigest()[:16]
+        
+        self.sessions[session_id] = {
+            'identifier': identifier,
+            'token': token,
+            'created': datetime.now(),
+            'expires': datetime.now() + timedelta(hours=1)
+        }
+        
+        return session_id
+    
+    def _get_user_id(self, identifier: str) -> str:
+        """الحصول على معرف المستخدم"""
+        return hashlib.md5(identifier.encode()).hexdigest()[:10]
+    
+    def _verify_pin(self, pin_code: str) -> bool:
+        """التحقق من رمز PIN"""
+        return len(pin_code) == 4 and pin_code.isdigit()
 
-class نتيجة_استرجاع_رابط_دوكومو(object):
-    def __init__(self, success=None, e=None):
-        self.success = success
-        self.e = e
-
-class معاملات_استرجاع_رمز(object):
-    def __init__(self, carrier=None):
-        self.carrier = carrier
-
-class نتيجة_استرجاع_رمز(object):
-    def __init__(self, success=None, e=None):
-        self.success = success
-        self.e = e
-
-الهياكل_كاملة.extend([معاملات_تحقق_عمر, نتيجة_تحقق_عمر, معاملات_تحقق_عمر_دوكومو, نتيجة_تحقق_عمر_دوكومو, معاملات_استرجاع_رابط_دوكومو, نتيجة_استرجاع_رابط_دوكومو, معاملات_استرجاع_رمز, نتيجة_استرجاع_رمز])
-fix_spec(الهياكل_كاملة)
-del الهياكل_كاملة
+# ============ مثال الاستخدام ============
+if __name__ == '__main__':
+    api = MessagingApi(ApiClient())
+    service = AuthService(api)
+    
+    # تسجيل الدخول
+    result = service.loginZ({
+        'identifier': 'user@example.com',
+        'password': 'hashed_password',
+        'deviceName': 'iPhone 15'
+    })
+    print(f"🔐 تم تسجيل الدخول: {result['authToken'][:20]}...")
+    
+    # تنسيق رقم هاتف
+    phone = service.normalizePhoneNumber('966', '512345678')
+    print(f"📱 الرقم المنسق: {phone}")
+    
+    # تسجيل الخروج
+    service.logoutZ()
