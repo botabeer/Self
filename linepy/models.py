@@ -6,22 +6,48 @@ from random import randint
 import json, shutil, time, os, base64, tempfile
     
 class Models(Object):
+    """
+    فئة النماذج التي توفر وظائف مساعدة لإدارة الملفات والمولدات
+    """
         
     def __init__(self):
+        """تهيئة فئة النماذج"""
         Object.__init__(self)
 
-    """Text"""
+    """وظائف النصوص"""
 
     def log(self, text):
+        """
+        تسجيل رسالة مع الطابع الزمني
+        
+        المعاملات:
+            text: النص المراد تسجيله
+        """
         print("[%s] %s" % (str(datetime.now()), text))
 
-    """File"""
+    """وظائف الملفات"""
 
     def saveFile(self, path, raw):
+        """
+        حفظ ملف من البيانات الخام
+        
+        المعاملات:
+            path: مسار الملف
+            raw: البيانات الخام
+        """
         with open(path, 'wb') as f:
             shutil.copyfileobj(raw, f)
 
     def deleteFile(self, path):
+        """
+        حذف ملف من المسار المحدد
+        
+        المعاملات:
+            path: مسار الملف
+        
+        العائد:
+            True إذا تم الحذف بنجاح، False إذا لم يكن الملف موجوداً
+        """
         if os.path.exists(path):
             os.remove(path)
             return True
@@ -29,6 +55,18 @@ class Models(Object):
             return False
 
     def downloadFileURL(self, fileUrl, returnAs='path', saveAs='', headers=None):
+        """
+        تنزيل ملف من رابط URL
+        
+        المعاملات:
+            fileUrl: رابط الملف
+            returnAs: نوع الإرجاع ('path', 'bool', 'bin')
+            saveAs: مسار الحفظ (اختياري)
+            headers: رؤوس HTTP (اختياري)
+        
+        العائد:
+            المسار، منطقي، أو البيانات الثنائية حسب returnAs
+        """
         if returnAs not in ['path','bool','bin']:
             raise Exception('Invalid returnAs value')
         if saveAs == '':
@@ -45,9 +83,18 @@ class Models(Object):
         else:
             raise Exception('Download file failure.')
 
-    """Generator"""
+    """وظائف المولدات"""
 
     def genTempFile(self, returnAs='path'):
+        """
+        إنشاء ملف مؤقت
+        
+        المعاملات:
+            returnAs: نوع الإرجاع ('file' أو 'path')
+        
+        العائد:
+            اسم الملف أو مساره الكامل
+        """
         try:
             if returnAs not in ['file','path']:
                 raise Exception('Invalid returnAs value')
@@ -60,6 +107,16 @@ class Models(Object):
             raise Exception('tempfile is required')
 
     def genOBSParams(self, newList, returnAs='json'):
+        """
+        إنشاء معاملات OBS (Object Storage)
+        
+        المعاملات:
+            newList: القاموس الجديد للمعاملات
+            returnAs: نوع الإرجاع ('json', 'b64', 'default')
+        
+        العائد:
+            المعاملات بالصيغة المطلوبة
+        """
         oldList = {'name': self.genTempFile('file'),'ver': '1.0'}
         if returnAs not in ['json','b64','default']:
             raise Exception('Invalid parameter returnAs')
