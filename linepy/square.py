@@ -35,7 +35,124 @@ class Square(object):
     """وظائف الكائنات - إرسال الوسائط"""
 
     @loggedIn
-    def sendSquareImage(self, squareChatMid, path):
+    def getJoinedSquares(self, continuationToken=None, limit=50):
+        """
+        الحصول على المربعات المنضم إليها
+        
+        المعاملات:
+            continuationToken: رمز المتابعة (اختياري)
+            limit: الحد الأقصى للنتائج (افتراضي: 50)
+        """
+        rq = GetJoinedSquaresRequest()
+        rq.continuationToken = continuationToken
+        rq.limit = limit
+        return self.square.getJoinedSquares(rq)
+
+    @loggedIn
+    def getJoinedSquareChats(self, continuationToken=None, limit=50):
+        """
+        الحصول على محادثات المربع المنضم إليها
+        
+        المعاملات:
+            continuationToken: رمز المتابعة (اختياري)
+            limit: الحد الأقصى للنتائج (افتراضي: 50)
+        """
+        rq = GetJoinedSquareChatsRequest()
+        rq.continuationToken = continuationToken
+        rq.limit = limit
+        return self.square.getJoinedSquareChats(rq)
+        
+    @loggedIn
+    def getJoinableSquareChats(self, squareMid, continuationToken=None, limit=50):
+        """
+        الحصول على محادثات المربع القابلة للانضمام
+        
+        المعاملات:
+            squareMid: معرف المربع
+            continuationToken: رمز المتابعة (اختياري)
+            limit: الحد الأقصى للنتائج (افتراضي: 50)
+        """
+        rq = GetJoinableSquareChatsRequest()
+        rq.squareMid = squareMid
+        rq.continuationToken = continuationToken
+        rq.limit = limit
+        return self.square.getJoinableSquareChats(rq)
+        
+    @loggedIn
+    def getInvitationTicketUrl(self, mid):
+        """
+        الحصول على رابط تذكرة الدعوة
+        
+        المعاملات:
+            mid: معرف المربع
+        """
+        rq = GetInvitationTicketUrlRequest()
+        rq.mid = mid
+        return self.square.getInvitationTicketUrl(rq)
+        
+    @loggedIn
+    def getSquareStatus(self, squareMid):
+        """
+        الحصول على حالة المربع
+        
+        المعاملات:
+            squareMid: معرف المربع
+        """
+        rq = GetSquareStatusRequest()
+        rq.squareMid = squareMid
+        return self.square.getSquareStatus(rq)
+        
+    @loggedIn
+    def getNoteStatus(self, squareMid):
+        """
+        الحصول على حالة الملاحظة
+        
+        المعاملات:
+            squareMid: معرف المربع
+        """
+        rq = GetNoteStatusRequest()
+        rq.squareMid = squareMid
+        return self.square.getNoteStatus(rq)
+        
+    @loggedIn
+    def searchSquares(self, query, continuationToken=None, limit=50):
+        """
+        البحث عن المربعات
+        
+        المعاملات:
+            query: نص البحث
+            continuationToken: رمز المتابعة (اختياري)
+            limit: الحد الأقصى للنتائج (افتراضي: 50)
+        """
+        rq = SearchSquaresRequest()
+        rq.query = query
+        rq.continuationToken = continuationToken
+        rq.limit = limit
+        return self.square.searchSquares(rq)
+        
+    @loggedIn
+    def refreshSubscriptions(self, subscriptions=[]):
+        """
+        تحديث الاشتراكات
+        
+        المعاملات:
+            subscriptions: قائمة الاشتراكات
+        """
+        rq = RefreshSubscriptionsRequest()
+        rq.subscriptions = subscriptions
+        return self.square.refreshSubscriptions(rq)
+        
+    @loggedIn
+    def removeSubscriptions(self, unsubscriptions=[]):
+        """
+        إزالة الاشتراكات
+        
+        المعاملات:
+            unsubscriptions: قائمة الاشتراكات المراد إزالتها
+        """
+        rq = RemoveSubscriptionsRequest()
+        rq.unsubscriptions = unsubscriptions
+        return self.square.removeSubscriptions(rq) sendSquareImage(self, squareChatMid, path):
         """
         إرسال صورة إلى محادثة المربع (قيد التطوير)
         
