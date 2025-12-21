@@ -7,11 +7,15 @@ from .callback import Callback
 import rsa, os
 
 class Auth(object):
+    """
+    فئة المصادقة للتعامل مع عمليات تسجيل الدخول في LINE
+    """
     isLogin     = False
     authToken   = ""
     certificate = ""
 
     def __init__(self):
+        """تهيئة المصادقة وإعداد الخادم والرؤوس"""
         self.server = Server()
         self.callback = Callback(self.__defaultCallback)
         self.server.setHeadersWithDict({
@@ -21,6 +25,7 @@ class Auth(object):
         })
 
     def __loadSession(self):
+        """تحميل جلسات العمل للخدمات المختلفة"""
         self.talk       = Session(self.server.LINE_HOST_DOMAIN, self.server.Headers, self.server.LINE_API_QUERY_PATH_FIR).Talk()
         self.poll       = Session(self.server.LINE_HOST_DOMAIN, self.server.Headers, self.server.LINE_POLL_QUERY_PATH_FIR).Talk()
         self.call       = Session(self.server.LINE_HOST_DOMAIN, self.server.Headers, self.server.LINE_CALL_QUERY_PATH).Call()
@@ -31,6 +36,13 @@ class Auth(object):
         self.isLogin = True
 
     def __loginRequest(self, type, data):
+        """
+        إنشاء طلب تسجيل الدخول
+        
+        المعاملات:
+            type: نوع التسجيل ('0' للهوية، '1' لرمز QR)
+            data: بيانات الطلب
+        """
         lReq = LoginRequest()
         if type == '0':
             lReq.type = LoginType.ID_CREDENTIAL
@@ -58,6 +70,17 @@ class Auth(object):
         return lReq
 
     def loginWithCredential(self, _id, passwd, certificate=None, systemName=None, appName=None, keepLoggedIn=True):
+        """
+        تسجيل الدخول باستخدام الهوية وكلمة المرور
+        
+        المعاملات:
+            _id: البريد الإلكتروني أو معرف المستخدم
+            passwd: كلمة المرور
+            certificate: الشهادة (اختياري)
+            systemName: اسم النظام (اختياري)
+            appName: اسم التطبيق (اختياري)
+            keepLoggedIn: الحفاظ على تسجيل الدخول (افتراضي: True)
+        """
         if systemName is None:
             systemName=self.server.SYSTEM_NAME
         if self.server.EMAIL_REGEX.match(_id):
@@ -70,14 +93,17 @@ class Auth(object):
         self.server.setHeaders('X-Line-Application', appName)
         self.tauth = Session(self.server.LINE_HOST_DOMAIN, self.server.Headers, self.server.LINE_AUTH_QUERY_PATH).Talk(isopen=False)
 
+        # الحصول على مفتاح RSA للتشفير
         rsaKey = self.tauth.getRSAKeyInfo(self.provider)
         
+        # تشفير بيانات الاعتماد
         message = (chr(len(rsaKey.sessionKey)) + rsaKey.sessionKey +
                    chr(len(_id)) + _id +
                    chr(len(passwd)) + passwd).encode('utf-8')
         pub_key = rsa.PublicKey(int(rsaKey.nvalue, 16), int(rsaKey.evalue, 16))
         crypto = rsa.encrypt(message, pub_key).hex()
 
+        # محاولة قراءة الشهادة من ملف أو استخدام الشهادة المقدمة
         try:
             with open(_id + '.crt', 'r') as f:
                 self.certificate = f.read()
@@ -90,6 +116,7 @@ class Auth(object):
 
         self.auth = Session(self.server.LINE_HOST_DOMAIN, self.server.Headers, self.server.LINE_LOGIN_QUERY_PATH).Auth(isopen=False)
 
+        # إنشاء طلب تسجيل الدخول
         lReq = self.__loginRequest('0', {
             'identityProvider': self.provider,
             'identifier': rsaKey.keynm,
@@ -103,6 +130,7 @@ class Auth(object):
 
         result = self.auth.loginZ(lReq)
         
+        # التعامل مع نتائج تسجيل الدخول المختلفة
         if result.type == LoginResultType.REQUIRE_DEVICE_CONFIRM:
             self.callback.PinVerified(result.pinCode)
 
@@ -142,6 +170,15 @@ class Auth(object):
             self.loginWithAuthToken(result.authToken, appName)
 
     def loginWithQrCode(self, keepLoggedIn=True, systemName=None, appName=None, showQr=False):
+        """
+        تسجيل الدخول باستخدام رمز QR
+        
+        المعاملات:
+            keepLoggedIn: الحفاظ على تسجيل الدخول (افتراضي: True)
+            systemName: اسم النظام (اختياري)
+            appName: اسم التطبيق (اختياري)
+            showQr: عرض رمز QR (افتراضي: False)
+        """
         if systemName is None:
             systemName=self.server.SYSTEM_NAME
         if appName is None:
@@ -180,6 +217,13 @@ class Auth(object):
             raise Exception('Login failed')
 
     def loginWithAuthToken(self, authToken=None, appName=None):
+        """
+        تسجيل الدخول باستخدام رمز المصادقة
+        
+        المعاملات:
+            authToken: رمز المصادقة
+            appName: اسم التطبيق (اختياري)
+        """
         if authToken is None:
             raise Exception('Please provide Auth Token')
         if appName is None:
@@ -192,7 +236,9 @@ class Auth(object):
         self.__loadSession()
 
     def __defaultCallback(self, str):
+        """دالة الاستدعاء الافتراضية للطباعة"""
         print(str)
 
     def logout(self):
+        """تسجيل الخروج من الحساب"""
         self.auth.logoutZ()
