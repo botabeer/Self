@@ -1,5 +1,5 @@
 #
-# خدمة المصادقة - LINE Messaging API v3
+# خدمة القروبات والحماية - LINE Messaging API v3
 # معرب مع أوامر إنجليزية
 #
 
@@ -14,64 +14,94 @@ from thrift.transport import TTransport
 الهياكل = []
 
 class واجهة(object):
-    """واجهة خدمة المصادقة والتسجيل"""
+    """واجهة خدمة القروبات والحماية"""
     
-    def normalizePhoneNumber(self, countryCode, phoneNumber, countryCodeHint):
-        """تطبيع رقم الهاتف"""
+    def getGroup(self, groupId):
+        """جلب معلومات القروب"""
         pass
 
-    def respondE2EELoginRequest(self, verifier, publicKey, encryptedKeyChain, hashKeyChain, errorCode):
-        """الرد على طلب تسجيل دخول E2EE"""
+    def getGroups(self, groupIds):
+        """جلب قائمة القروبات"""
         pass
 
-    def confirmE2EELogin(self, verifier, deviceSecret):
-        """تأكيد تسجيل دخول E2EE"""
+    def getGroupsV2(self, groupIds):
+        """جلب قائمة القروبات v2"""
         pass
 
-    def logoutZ(self):
-        """تسجيل الخروج"""
+    def getCompactGroup(self, groupId):
+        """جلب معلومات مختصرة للقروب"""
         pass
 
-    def loginZ(self, loginRequest):
-        """تسجيل الدخول"""
+    def createGroup(self, seq, name, memberMids):
+        """إنشاء قروب"""
         pass
 
-    def issueTokenForAccountMigrationSettings(self, enforce):
-        """إصدار رمز لإعدادات نقل الحساب"""
+    def inviteIntoGroup(self, reqSeq, groupId, contactIds):
+        """دعوة أعضاء للقروب"""
         pass
 
-    def issueTokenForAccountMigration(self, migrationSessionId):
-        """إصدار رمز لنقل الحساب"""
+    def acceptGroupInvitation(self, reqSeq, groupId):
+        """قبول دعوة القروب"""
         pass
 
-    def verifyQrcodeWithE2EE(self, verifier, pinCode, errorCode, publicKey, encryptedKeyChain, hashKeyChain):
-        """التحقق من رمز QR مع E2EE"""
+    def acceptGroupInvitationByTicket(self, reqSeq, groupId, ticketId):
+        """قبول دعوة القروب بالتذكرة"""
+        pass
+
+    def cancelGroupInvitation(self, reqSeq, groupId, contactIds):
+        """إلغاء دعوة القروب"""
+        pass
+
+    def kickoutFromGroup(self, reqSeq, groupId, contactIds):
+        """طرد من القروب"""
+        pass
+
+    def leaveGroup(self, reqSeq, groupId):
+        """مغادرة القروب"""
+        pass
+
+    def updateGroup(self, reqSeq, group):
+        """تحديث بيانات القروب"""
+        pass
+
+    def updateGroupPreferenceAttribute(self, reqSeq, groupId, updatedAttrs):
+        """تحديث إعدادات القروب"""
+        pass
+
+    def reissueGroupTicket(self, groupId):
+        """إعادة إصدار رابط القروب"""
+        pass
+
+    def findGroupByTicket(self, ticketId):
+        """البحث عن قروب بالرابط"""
+        pass
+
+    def getGroupWithoutMembers(self, groupId):
+        """جلب القروب بدون قائمة الأعضاء"""
         pass
 
 
 class عميل(واجهة):
-    """عميل خدمة المصادقة"""
+    """عميل خدمة القروبات"""
     
     def __init__(self, iprot, oprot=None):
         self._iprot = self._oprot = iprot
         if oprot: self._oprot = oprot
         self._seqid = 0
 
-    def normalizePhoneNumber(self, cc, pn, hint):
-        self._ارسل_تطبيع_رقم(cc, pn, hint)
-        return self._استقبل_تطبيع_رقم()
+    def getGroup(self, gid):
+        self._ارسل_جلب_قروب(gid)
+        return self._استقبل_جلب_قروب()
 
-    def _ارسل_تطبيع_رقم(self, cc, pn, hint):
-        self._oprot.writeMessageBegin('normalizePhoneNumber', TMessageType.CALL, self._seqid)
-        معاملات = معاملات_تطبيع_رقم()
-        معاملات.countryCode = cc
-        معاملات.phoneNumber = pn
-        معاملات.countryCodeHint = hint
-        معاملات.write(self._oprot)
+    def _ارسل_جلب_قروب(self, gid):
+        self._oprot.writeMessageBegin('getGroup', TMessageType.CALL, self._seqid)
+        م = معاملات_جلب_قروب()
+        م.groupId = gid
+        م.write(self._oprot)
         self._oprot.writeMessageEnd()
         self._oprot.trans.flush()
 
-    def _استقبل_تطبيع_رقم(self):
+    def _استقبل_جلب_قروب(self):
         iprot = self._iprot
         (fname, mtype, rseqid) = iprot.readMessageBegin()
         if mtype == TMessageType.EXCEPTION:
@@ -79,30 +109,26 @@ class عميل(واجهة):
             x.read(iprot)
             iprot.readMessageEnd()
             raise x
-        نتيجة = نتيجة_تطبيع_رقم()
-        نتيجة.read(iprot)
+        ن = نتيجة_جلب_قروب()
+        ن.read(iprot)
         iprot.readMessageEnd()
-        if نتيجة.success is not None: return نتيجة.success
-        if نتيجة.e is not None: raise نتيجة.e
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "فشل تطبيع الرقم")
+        if ن.success is not None: return ن.success
+        if ن.e is not None: raise ن.e
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "فشل جلب القروب")
 
-    def respondE2EELoginRequest(self, v, pk, ekc, hkc, ec):
-        self._ارسل_رد_E2EE(v, pk, ekc, hkc, ec)
-        self._استقبل_رد_E2EE()
+    def getGroups(self, gids):
+        self._ارسل_جلب_قروبات(gids)
+        return self._استقبل_جلب_قروبات()
 
-    def _ارسل_رد_E2EE(self, v, pk, ekc, hkc, ec):
-        self._oprot.writeMessageBegin('respondE2EELoginRequest', TMessageType.CALL, self._seqid)
-        معاملات = معاملات_رد_E2EE()
-        معاملات.verifier = v
-        معاملات.publicKey = pk
-        معاملات.encryptedKeyChain = ekc
-        معاملات.hashKeyChain = hkc
-        معاملات.errorCode = ec
-        معاملات.write(self._oprot)
+    def _ارسل_جلب_قروبات(self, gids):
+        self._oprot.writeMessageBegin('getGroups', TMessageType.CALL, self._seqid)
+        م = معاملات_جلب_قروبات()
+        م.groupIds = gids
+        م.write(self._oprot)
         self._oprot.writeMessageEnd()
         self._oprot.trans.flush()
 
-    def _استقبل_رد_E2EE(self):
+    def _استقبل_جلب_قروبات(self):
         iprot = self._iprot
         (fname, mtype, rseqid) = iprot.readMessageBegin()
         if mtype == TMessageType.EXCEPTION:
@@ -110,25 +136,28 @@ class عميل(واجهة):
             x.read(iprot)
             iprot.readMessageEnd()
             raise x
-        نتيجة = نتيجة_رد_E2EE()
-        نتيجة.read(iprot)
+        ن = نتيجة_جلب_قروبات()
+        ن.read(iprot)
         iprot.readMessageEnd()
-        if نتيجة.e is not None: raise نتيجة.e
+        if ن.success is not None: return ن.success
+        if ن.e is not None: raise ن.e
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "فشل جلب القروبات")
 
-    def confirmE2EELogin(self, v, ds):
-        self._ارسل_تأكيد_E2EE(v, ds)
-        return self._استقبل_تأكيد_E2EE()
+    def createGroup(self, seq, name, mids):
+        self._ارسل_انشاء_قروب(seq, name, mids)
+        return self._استقبل_انشاء_قروب()
 
-    def _ارسل_تأكيد_E2EE(self, v, ds):
-        self._oprot.writeMessageBegin('confirmE2EELogin', TMessageType.CALL, self._seqid)
-        معاملات = معاملات_تأكيد_E2EE()
-        معاملات.verifier = v
-        معاملات.deviceSecret = ds
-        معاملات.write(self._oprot)
+    def _ارسل_انشاء_قروب(self, seq, name, mids):
+        self._oprot.writeMessageBegin('createGroup', TMessageType.CALL, self._seqid)
+        م = معاملات_انشاء_قروب()
+        م.seq = seq
+        م.name = name
+        م.memberMids = mids
+        م.write(self._oprot)
         self._oprot.writeMessageEnd()
         self._oprot.trans.flush()
 
-    def _استقبل_تأكيد_E2EE(self):
+    def _استقبل_انشاء_قروب(self):
         iprot = self._iprot
         (fname, mtype, rseqid) = iprot.readMessageBegin()
         if mtype == TMessageType.EXCEPTION:
@@ -136,25 +165,28 @@ class عميل(واجهة):
             x.read(iprot)
             iprot.readMessageEnd()
             raise x
-        نتيجة = نتيجة_تأكيد_E2EE()
-        نتيجة.read(iprot)
+        ن = نتيجة_انشاء_قروب()
+        ن.read(iprot)
         iprot.readMessageEnd()
-        if نتيجة.success is not None: return نتيجة.success
-        if نتيجة.e is not None: raise نتيجة.e
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "فشل تأكيد E2EE")
+        if ن.success is not None: return ن.success
+        if ن.e is not None: raise ن.e
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "فشل إنشاء القروب")
 
-    def logoutZ(self):
-        self._ارسل_خروج()
-        self._استقبل_خروج()
+    def inviteIntoGroup(self, seq, gid, cids):
+        self._ارسل_دعوة_قروب(seq, gid, cids)
+        self._استقبل_دعوة_قروب()
 
-    def _ارسل_خروج(self):
-        self._oprot.writeMessageBegin('logoutZ', TMessageType.CALL, self._seqid)
-        معاملات = معاملات_خروج()
-        معاملات.write(self._oprot)
+    def _ارسل_دعوة_قروب(self, seq, gid, cids):
+        self._oprot.writeMessageBegin('inviteIntoGroup', TMessageType.CALL, self._seqid)
+        م = معاملات_دعوة_قروب()
+        م.reqSeq = seq
+        م.groupId = gid
+        م.contactIds = cids
+        م.write(self._oprot)
         self._oprot.writeMessageEnd()
         self._oprot.trans.flush()
 
-    def _استقبل_خروج(self):
+    def _استقبل_دعوة_قروب(self):
         iprot = self._iprot
         (fname, mtype, rseqid) = iprot.readMessageBegin()
         if mtype == TMessageType.EXCEPTION:
@@ -162,24 +194,26 @@ class عميل(واجهة):
             x.read(iprot)
             iprot.readMessageEnd()
             raise x
-        نتيجة = نتيجة_خروج()
-        نتيجة.read(iprot)
+        ن = نتيجة_دعوة_قروب()
+        ن.read(iprot)
         iprot.readMessageEnd()
-        if نتيجة.e is not None: raise نتيجة.e
+        if ن.e is not None: raise ن.e
 
-    def loginZ(self, req):
-        self._ارسل_دخول(req)
-        return self._استقبل_دخول()
+    def kickoutFromGroup(self, seq, gid, cids):
+        self._ارسل_طرد_قروب(seq, gid, cids)
+        self._استقبل_طرد_قروب()
 
-    def _ارسل_دخول(self, req):
-        self._oprot.writeMessageBegin('loginZ', TMessageType.CALL, self._seqid)
-        معاملات = معاملات_دخول()
-        معاملات.loginRequest = req
-        معاملات.write(self._oprot)
+    def _ارسل_طرد_قروب(self, seq, gid, cids):
+        self._oprot.writeMessageBegin('kickoutFromGroup', TMessageType.CALL, self._seqid)
+        م = معاملات_طرد_قروب()
+        م.reqSeq = seq
+        م.groupId = gid
+        م.contactIds = cids
+        م.write(self._oprot)
         self._oprot.writeMessageEnd()
         self._oprot.trans.flush()
 
-    def _استقبل_دخول(self):
+    def _استقبل_طرد_قروب(self):
         iprot = self._iprot
         (fname, mtype, rseqid) = iprot.readMessageBegin()
         if mtype == TMessageType.EXCEPTION:
@@ -187,26 +221,25 @@ class عميل(واجهة):
             x.read(iprot)
             iprot.readMessageEnd()
             raise x
-        نتيجة = نتيجة_دخول()
-        نتيجة.read(iprot)
+        ن = نتيجة_طرد_قروب()
+        ن.read(iprot)
         iprot.readMessageEnd()
-        if نتيجة.success is not None: return نتيجة.success
-        if نتيجة.e is not None: raise نتيجة.e
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "فشل تسجيل الدخول")
+        if ن.e is not None: raise ن.e
 
-    def issueTokenForAccountMigrationSettings(self, enforce):
-        self._ارسل_رمز_اعدادات_نقل(enforce)
-        return self._استقبل_رمز_اعدادات_نقل()
+    def leaveGroup(self, seq, gid):
+        self._ارسل_مغادرة_قروب(seq, gid)
+        self._استقبل_مغادرة_قروب()
 
-    def _ارسل_رمز_اعدادات_نقل(self, e):
-        self._oprot.writeMessageBegin('issueTokenForAccountMigrationSettings', TMessageType.CALL, self._seqid)
-        معاملات = معاملات_رمز_اعدادات_نقل()
-        معاملات.enforce = e
-        معاملات.write(self._oprot)
+    def _ارسل_مغادرة_قروب(self, seq, gid):
+        self._oprot.writeMessageBegin('leaveGroup', TMessageType.CALL, self._seqid)
+        م = معاملات_مغادرة_قروب()
+        م.reqSeq = seq
+        م.groupId = gid
+        م.write(self._oprot)
         self._oprot.writeMessageEnd()
         self._oprot.trans.flush()
 
-    def _استقبل_رمز_اعدادات_نقل(self):
+    def _استقبل_مغادرة_قروب(self):
         iprot = self._iprot
         (fname, mtype, rseqid) = iprot.readMessageBegin()
         if mtype == TMessageType.EXCEPTION:
@@ -214,26 +247,25 @@ class عميل(واجهة):
             x.read(iprot)
             iprot.readMessageEnd()
             raise x
-        نتيجة = نتيجة_رمز_اعدادات_نقل()
-        نتيجة.read(iprot)
+        ن = نتيجة_مغادرة_قروب()
+        ن.read(iprot)
         iprot.readMessageEnd()
-        if نتيجة.success is not None: return نتيجة.success
-        if نتيجة.e is not None: raise نتيجة.e
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "فشل إصدار رمز الإعدادات")
+        if ن.e is not None: raise ن.e
 
-    def issueTokenForAccountMigration(self, sid):
-        self._ارسل_رمز_نقل(sid)
-        return self._استقبل_رمز_نقل()
+    def updateGroup(self, seq, grp):
+        self._ارسل_تحديث_قروب(seq, grp)
+        self._استقبل_تحديث_قروب()
 
-    def _ارسل_رمز_نقل(self, sid):
-        self._oprot.writeMessageBegin('issueTokenForAccountMigration', TMessageType.CALL, self._seqid)
-        معاملات = معاملات_رمز_نقل()
-        معاملات.migrationSessionId = sid
-        معاملات.write(self._oprot)
+    def _ارسل_تحديث_قروب(self, seq, grp):
+        self._oprot.writeMessageBegin('updateGroup', TMessageType.CALL, self._seqid)
+        م = معاملات_تحديث_قروب()
+        م.reqSeq = seq
+        م.group = grp
+        م.write(self._oprot)
         self._oprot.writeMessageEnd()
         self._oprot.trans.flush()
 
-    def _استقبل_رمز_نقل(self):
+    def _استقبل_تحديث_قروب(self):
         iprot = self._iprot
         (fname, mtype, rseqid) = iprot.readMessageBegin()
         if mtype == TMessageType.EXCEPTION:
@@ -241,60 +273,25 @@ class عميل(واجهة):
             x.read(iprot)
             iprot.readMessageEnd()
             raise x
-        نتيجة = نتيجة_رمز_نقل()
-        نتيجة.read(iprot)
+        ن = نتيجة_تحديث_قروب()
+        ن.read(iprot)
         iprot.readMessageEnd()
-        if نتيجة.success is not None: return نتيجة.success
-        if نتيجة.e is not None: raise نتيجة.e
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "فشل إصدار رمز النقل")
-
-    def verifyQrcodeWithE2EE(self, v, pin, ec, pk, ekc, hkc):
-        self._ارسل_تحقق_QR_E2EE(v, pin, ec, pk, ekc, hkc)
-        return self._استقبل_تحقق_QR_E2EE()
-
-    def _ارسل_تحقق_QR_E2EE(self, v, pin, ec, pk, ekc, hkc):
-        self._oprot.writeMessageBegin('verifyQrcodeWithE2EE', TMessageType.CALL, self._seqid)
-        معاملات = معاملات_تحقق_QR_E2EE()
-        معاملات.verifier = v
-        معاملات.pinCode = pin
-        معاملات.errorCode = ec
-        معاملات.publicKey = pk
-        معاملات.encryptedKeyChain = ekc
-        معاملات.hashKeyChain = hkc
-        معاملات.write(self._oprot)
-        self._oprot.writeMessageEnd()
-        self._oprot.trans.flush()
-
-    def _استقبل_تحقق_QR_E2EE(self):
-        iprot = self._iprot
-        (fname, mtype, rseqid) = iprot.readMessageBegin()
-        if mtype == TMessageType.EXCEPTION:
-            x = TApplicationException()
-            x.read(iprot)
-            iprot.readMessageEnd()
-            raise x
-        نتيجة = نتيجة_تحقق_QR_E2EE()
-        نتيجة.read(iprot)
-        iprot.readMessageEnd()
-        if نتيجة.success is not None: return نتيجة.success
-        if نتيجة.e is not None: raise نتيجة.e
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "فشل التحقق من QR")
+        if ن.e is not None: raise ن.e
 
 
 class معالج(واجهة, TProcessor):
-    """معالج طلبات المصادقة"""
+    """معالج طلبات القروبات"""
     
     def __init__(self, handler):
         self._handler = handler
         self._processMap = {
-            "normalizePhoneNumber": معالج.process_normalizePhoneNumber,
-            "respondE2EELoginRequest": معالج.process_respondE2EELoginRequest,
-            "confirmE2EELogin": معالج.process_confirmE2EELogin,
-            "logoutZ": معالج.process_logoutZ,
-            "loginZ": معالج.process_loginZ,
-            "issueTokenForAccountMigrationSettings": معالج.process_issueTokenForAccountMigrationSettings,
-            "issueTokenForAccountMigration": معالج.process_issueTokenForAccountMigration,
-            "verifyQrcodeWithE2EE": معالج.process_verifyQrcodeWithE2EE
+            "getGroup": معالج.process_getGroup,
+            "getGroups": معالج.process_getGroups,
+            "createGroup": معالج.process_createGroup,
+            "inviteIntoGroup": معالج.process_inviteIntoGroup,
+            "kickoutFromGroup": معالج.process_kickoutFromGroup,
+            "leaveGroup": معالج.process_leaveGroup,
+            "updateGroup": معالج.process_updateGroup
         }
 
     def process(self, iprot, oprot):
@@ -311,277 +308,117 @@ class معالج(واجهة, TProcessor):
         self._processMap[name](self, seqid, iprot, oprot)
         return True
 
-    def process_normalizePhoneNumber(self, seqid, iprot, oprot):
-        معاملات = معاملات_تطبيع_رقم()
-        معاملات.read(iprot)
+    def process_getGroup(self, seqid, iprot, oprot):
+        م = معاملات_جلب_قروب()
+        م.read(iprot)
         iprot.readMessageEnd()
-        نتيجة = نتيجة_تطبيع_رقم()
+        ن = نتيجة_جلب_قروب()
         try:
-            نتيجة.success = self._handler.normalizePhoneNumber(معاملات.countryCode, معاملات.phoneNumber, معاملات.countryCodeHint)
+            ن.success = self._handler.getGroup(م.groupId)
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
         except TalkException as e:
             msg_type = TMessageType.REPLY
-            نتيجة.e = e
+            ن.e = e
         except Exception:
             logging.exception('خطأ في المعالج')
             msg_type = TMessageType.EXCEPTION
-            نتيجة = TApplicationException(TApplicationException.INTERNAL_ERROR, 'خطأ داخلي')
-        oprot.writeMessageBegin("normalizePhoneNumber", msg_type, seqid)
-        نتيجة.write(oprot)
+            ن = TApplicationException(TApplicationException.INTERNAL_ERROR, 'خطأ داخلي')
+        oprot.writeMessageBegin("getGroup", msg_type, seqid)
+        ن.write(oprot)
         oprot.writeMessageEnd()
         oprot.trans.flush()
 
-    def process_respondE2EELoginRequest(self, seqid, iprot, oprot):
-        معاملات = معاملات_رد_E2EE()
-        معاملات.read(iprot)
+    def process_kickoutFromGroup(self, seqid, iprot, oprot):
+        م = معاملات_طرد_قروب()
+        م.read(iprot)
         iprot.readMessageEnd()
-        نتيجة = نتيجة_رد_E2EE()
+        ن = نتيجة_طرد_قروب()
         try:
-            self._handler.respondE2EELoginRequest(معاملات.verifier, معاملات.publicKey, معاملات.encryptedKeyChain, معاملات.hashKeyChain, معاملات.errorCode)
+            self._handler.kickoutFromGroup(م.reqSeq, م.groupId, م.contactIds)
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
         except TalkException as e:
             msg_type = TMessageType.REPLY
-            نتيجة.e = e
+            ن.e = e
         except Exception:
             logging.exception('خطأ في المعالج')
             msg_type = TMessageType.EXCEPTION
-            نتيجة = TApplicationException(TApplicationException.INTERNAL_ERROR, 'خطأ داخلي')
-        oprot.writeMessageBegin("respondE2EELoginRequest", msg_type, seqid)
-        نتيجة.write(oprot)
-        oprot.writeMessageEnd()
-        oprot.trans.flush()
-
-    def process_confirmE2EELogin(self, seqid, iprot, oprot):
-        معاملات = معاملات_تأكيد_E2EE()
-        معاملات.read(iprot)
-        iprot.readMessageEnd()
-        نتيجة = نتيجة_تأكيد_E2EE()
-        try:
-            نتيجة.success = self._handler.confirmE2EELogin(معاملات.verifier, معاملات.deviceSecret)
-            msg_type = TMessageType.REPLY
-        except TTransport.TTransportException:
-            raise
-        except TalkException as e:
-            msg_type = TMessageType.REPLY
-            نتيجة.e = e
-        except Exception:
-            logging.exception('خطأ في المعالج')
-            msg_type = TMessageType.EXCEPTION
-            نتيجة = TApplicationException(TApplicationException.INTERNAL_ERROR, 'خطأ داخلي')
-        oprot.writeMessageBegin("confirmE2EELogin", msg_type, seqid)
-        نتيجة.write(oprot)
-        oprot.writeMessageEnd()
-        oprot.trans.flush()
-
-    def process_logoutZ(self, seqid, iprot, oprot):
-        معاملات = معاملات_خروج()
-        معاملات.read(iprot)
-        iprot.readMessageEnd()
-        نتيجة = نتيجة_خروج()
-        try:
-            self._handler.logoutZ()
-            msg_type = TMessageType.REPLY
-        except TTransport.TTransportException:
-            raise
-        except TalkException as e:
-            msg_type = TMessageType.REPLY
-            نتيجة.e = e
-        except Exception:
-            logging.exception('خطأ في المعالج')
-            msg_type = TMessageType.EXCEPTION
-            نتيجة = TApplicationException(TApplicationException.INTERNAL_ERROR, 'خطأ داخلي')
-        oprot.writeMessageBegin("logoutZ", msg_type, seqid)
-        نتيجة.write(oprot)
-        oprot.writeMessageEnd()
-        oprot.trans.flush()
-
-    def process_loginZ(self, seqid, iprot, oprot):
-        معاملات = معاملات_دخول()
-        معاملات.read(iprot)
-        iprot.readMessageEnd()
-        نتيجة = نتيجة_دخول()
-        try:
-            نتيجة.success = self._handler.loginZ(معاملات.loginRequest)
-            msg_type = TMessageType.REPLY
-        except TTransport.TTransportException:
-            raise
-        except TalkException as e:
-            msg_type = TMessageType.REPLY
-            نتيجة.e = e
-        except Exception:
-            logging.exception('خطأ في المعالج')
-            msg_type = TMessageType.EXCEPTION
-            نتيجة = TApplicationException(TApplicationException.INTERNAL_ERROR, 'خطأ داخلي')
-        oprot.writeMessageBegin("loginZ", msg_type, seqid)
-        نتيجة.write(oprot)
-        oprot.writeMessageEnd()
-        oprot.trans.flush()
-
-    def process_issueTokenForAccountMigrationSettings(self, seqid, iprot, oprot):
-        معاملات = معاملات_رمز_اعدادات_نقل()
-        معاملات.read(iprot)
-        iprot.readMessageEnd()
-        نتيجة = نتيجة_رمز_اعدادات_نقل()
-        try:
-            نتيجة.success = self._handler.issueTokenForAccountMigrationSettings(معاملات.enforce)
-            msg_type = TMessageType.REPLY
-        except TTransport.TTransportException:
-            raise
-        except TalkException as e:
-            msg_type = TMessageType.REPLY
-            نتيجة.e = e
-        except Exception:
-            logging.exception('خطأ في المعالج')
-            msg_type = TMessageType.EXCEPTION
-            نتيجة = TApplicationException(TApplicationException.INTERNAL_ERROR, 'خطأ داخلي')
-        oprot.writeMessageBegin("issueTokenForAccountMigrationSettings", msg_type, seqid)
-        نتيجة.write(oprot)
-        oprot.writeMessageEnd()
-        oprot.trans.flush()
-
-    def process_issueTokenForAccountMigration(self, seqid, iprot, oprot):
-        معاملات = معاملات_رمز_نقل()
-        معاملات.read(iprot)
-        iprot.readMessageEnd()
-        نتيجة = نتيجة_رمز_نقل()
-        try:
-            نتيجة.success = self._handler.issueTokenForAccountMigration(معاملات.migrationSessionId)
-            msg_type = TMessageType.REPLY
-        except TTransport.TTransportException:
-            raise
-        except TalkException as e:
-            msg_type = TMessageType.REPLY
-            نتيجة.e = e
-        except Exception:
-            logging.exception('خطأ في المعالج')
-            msg_type = TMessageType.EXCEPTION
-            نتيجة = TApplicationException(TApplicationException.INTERNAL_ERROR, 'خطأ داخلي')
-        oprot.writeMessageBegin("issueTokenForAccountMigration", msg_type, seqid)
-        نتيجة.write(oprot)
-        oprot.writeMessageEnd()
-        oprot.trans.flush()
-
-    def process_verifyQrcodeWithE2EE(self, seqid, iprot, oprot):
-        معاملات = معاملات_تحقق_QR_E2EE()
-        معاملات.read(iprot)
-        iprot.readMessageEnd()
-        نتيجة = نتيجة_تحقق_QR_E2EE()
-        try:
-            نتيجة.success = self._handler.verifyQrcodeWithE2EE(معاملات.verifier, معاملات.pinCode, معاملات.errorCode, معاملات.publicKey, معاملات.encryptedKeyChain, معاملات.hashKeyChain)
-            msg_type = TMessageType.REPLY
-        except TTransport.TTransportException:
-            raise
-        except TalkException as e:
-            msg_type = TMessageType.REPLY
-            نتيجة.e = e
-        except Exception:
-            logging.exception('خطأ في المعالج')
-            msg_type = TMessageType.EXCEPTION
-            نتيجة = TApplicationException(TApplicationException.INTERNAL_ERROR, 'خطأ داخلي')
-        oprot.writeMessageBegin("verifyQrcodeWithE2EE", msg_type, seqid)
-        نتيجة.write(oprot)
+            ن = TApplicationException(TApplicationException.INTERNAL_ERROR, 'خطأ داخلي')
+        oprot.writeMessageBegin("kickoutFromGroup", msg_type, seqid)
+        ن.write(oprot)
         oprot.writeMessageEnd()
         oprot.trans.flush()
 
 
-# الهياكل المساعدة (مضغوطة)
-class معاملات_تطبيع_رقم(object):
-    def __init__(self, countryCode=None, phoneNumber=None, countryCodeHint=None):
-        self.countryCode = countryCode
-        self.phoneNumber = phoneNumber
-        self.countryCodeHint = countryCodeHint
+# الهياكل المساعدة
+class معاملات_جلب_قروب(object):
+    def __init__(self, groupId=None):
+        self.groupId = groupId
 
-class نتيجة_تطبيع_رقم(object):
+class نتيجة_جلب_قروب(object):
     def __init__(self, success=None, e=None):
         self.success = success
         self.e = e
 
-class معاملات_رد_E2EE(object):
-    def __init__(self, verifier=None, publicKey=None, encryptedKeyChain=None, hashKeyChain=None, errorCode=None):
-        self.verifier = verifier
-        self.publicKey = publicKey
-        self.encryptedKeyChain = encryptedKeyChain
-        self.hashKeyChain = hashKeyChain
-        self.errorCode = errorCode
+class معاملات_جلب_قروبات(object):
+    def __init__(self, groupIds=None):
+        self.groupIds = groupIds
 
-class نتيجة_رد_E2EE(object):
+class نتيجة_جلب_قروبات(object):
+    def __init__(self, success=None, e=None):
+        self.success = success
+        self.e = e
+
+class معاملات_انشاء_قروب(object):
+    def __init__(self, seq=None, name=None, memberMids=None):
+        self.seq = seq
+        self.name = name
+        self.memberMids = memberMids
+
+class نتيجة_انشاء_قروب(object):
+    def __init__(self, success=None, e=None):
+        self.success = success
+        self.e = e
+
+class معاملات_دعوة_قروب(object):
+    def __init__(self, reqSeq=None, groupId=None, contactIds=None):
+        self.reqSeq = reqSeq
+        self.groupId = groupId
+        self.contactIds = contactIds
+
+class نتيجة_دعوة_قروب(object):
     def __init__(self, e=None):
         self.e = e
 
-class معاملات_تأكيد_E2EE(object):
-    def __init__(self, verifier=None, deviceSecret=None):
-        self.verifier = verifier
-        self.deviceSecret = deviceSecret
+class معاملات_طرد_قروب(object):
+    def __init__(self, reqSeq=None, groupId=None, contactIds=None):
+        self.reqSeq = reqSeq
+        self.groupId = groupId
+        self.contactIds = contactIds
 
-class نتيجة_تأكيد_E2EE(object):
-    def __init__(self, success=None, e=None):
-        self.success = success
-        self.e = e
-
-class معاملات_خروج(object):
-    def read(self, iprot):
-        if iprot._fast_decode: return iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
-        iprot.readStructBegin()
-        while True:
-            (fname, ftype, fid) = iprot.readFieldBegin()
-            if ftype == TType.STOP: break
-            iprot.skip(ftype)
-            iprot.readFieldEnd()
-        iprot.readStructEnd()
-    
-    def write(self, oprot):
-        if oprot._fast_encode: return oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
-        oprot.writeStructBegin('logoutZ_args')
-        oprot.writeFieldStop()
-        oprot.writeStructEnd()
-
-class نتيجة_خروج(object):
+class نتيجة_طرد_قروب(object):
     def __init__(self, e=None):
         self.e = e
 
-class معاملات_دخول(object):
-    def __init__(self, loginRequest=None):
-        self.loginRequest = loginRequest
+class معاملات_مغادرة_قروب(object):
+    def __init__(self, reqSeq=None, groupId=None):
+        self.reqSeq = reqSeq
+        self.groupId = groupId
 
-class نتيجة_دخول(object):
-    def __init__(self, success=None, e=None):
-        self.success = success
+class نتيجة_مغادرة_قروب(object):
+    def __init__(self, e=None):
         self.e = e
 
-class معاملات_رمز_اعدادات_نقل(object):
-    def __init__(self, enforce=None):
-        self.enforce = enforce
+class معاملات_تحديث_قروب(object):
+    def __init__(self, reqSeq=None, group=None):
+        self.reqSeq = reqSeq
+        self.group = group
 
-class نتيجة_رمز_اعدادات_نقل(object):
-    def __init__(self, success=None, e=None):
-        self.success = success
+class نتيجة_تحديث_قروب(object):
+    def __init__(self, e=None):
         self.e = e
 
-class معاملات_رمز_نقل(object):
-    def __init__(self, migrationSessionId=None):
-        self.migrationSessionId = migrationSessionId
-
-class نتيجة_رمز_نقل(object):
-    def __init__(self, success=None, e=None):
-        self.success = success
-        self.e = e
-
-class معاملات_تحقق_QR_E2EE(object):
-    def __init__(self, verifier=None, pinCode=None, errorCode=None, publicKey=None, encryptedKeyChain=None, hashKeyChain=None):
-        self.verifier = verifier
-        self.pinCode = pinCode
-        self.errorCode = errorCode
-        self.publicKey = publicKey
-        self.encryptedKeyChain = encryptedKeyChain
-        self.hashKeyChain = hashKeyChain
-
-class نتيجة_تحقق_QR_E2EE(object):
-    def __init__(self, success=None, e=None):
-        self.success = success
-        self.e = e
-
-الهياكل.extend([معاملات_تطبيع_رقم, نتيجة_تطبيع_رقم, معاملات_رد_E2EE, نتيجة_رد_E2EE, معاملات_تأكيد_E2EE, نتيجة_تأكيد_E2EE, معاملات_خروج, نتيجة_خروج, معاملات_دخول, نتيجة_دخول, معاملات_رمز_اعدادات_نقل, نتيجة_رمز_اعدادات
+الهياكل.extend([معاملات_جلب_قروب, نتيجة_جلب_قروب, معاملات_جلب_قروبات, نتيجة_جلب_قروبات, معاملات_انشاء_قروب, نتيجة_انشاء_قروب, معاملات_دعوة_قروب, نتيجة_دعوة_قروب, معاملات_طرد_قروب, نتيجة_طرد_قروب, معاملات_مغادرة_قروب, نتيجة_مغادرة_قروب, معاملات_تحديث_قروب, نتيجة_تحديث_قروب])
