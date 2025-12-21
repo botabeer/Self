@@ -1,172 +1,192 @@
-# تم إنشاؤه تلقائياً بواسطة Thrift Compiler (0.11.0)
-# لا تقم بالتعديل إلا إذا كنت متأكداً من معرفتك بما تفعله
-from thrift.Thrift import TType,TMessageType,TFrozenDict,TException,TApplicationException
-from thrift.protocol.TProtocol import TProtocolException
-from thrift.TRecursive import fix_spec
-import sys
-import logging
-from .ttypes import *
-from thrift.Thrift import TProcessor
-from thrift.transport import TTransport
-all_structs=[]
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+UniversalNotificationService - نظام الإشعارات الشامل
+متوافق مع LINE Messaging API v3
+"""
 
-class Iface(object):
-    def notify(self,event):
-        """المعاملات: - event"""
-        pass
+from typing import Dict, Callable, List
+from datetime import datetime
+from linebot.v3.messaging import (MessagingApi, ApiClient, PushMessageRequest,
+                                   TextMessage, FlexMessage, FlexContainer)
 
-class Client(Iface):
-    def __init__(self,iprot,oprot=None):
-        self._iprot=self._oprot=iprot
-        if oprot is not None:self._oprot=oprot
-        self._seqid=0
-    def notify(self,event):
-        """المعاملات: - event"""
-        self.send_notify(event)
-        self.recv_notify()
-    def send_notify(self,event):
-        self._oprot.writeMessageBegin('notify',TMessageType.CALL,self._seqid)
-        args=notify_args()
-        args.event=event
-        args.write(self._oprot)
-        self._oprot.writeMessageEnd()
-        self._oprot.trans.flush()
-    def recv_notify(self):
-        iprot=self._iprot
-        (fname,mtype,rseqid)=iprot.readMessageBegin()
-        if mtype==TMessageType.EXCEPTION:
-            x=TApplicationException()
-            x.read(iprot)
-            iprot.readMessageEnd()
-            raise x
-        result=notify_result()
-        result.read(iprot)
-        iprot.readMessageEnd()
-        if result.e is not None:raise result.e
-        return
-
-class Processor(Iface,TProcessor):
-    def __init__(self,handler):
-        self._handler=handler
-        self._processMap={}
-        self._processMap["notify"]=Processor.process_notify
-    def process(self,iprot,oprot):
-        (name,type,seqid)=iprot.readMessageBegin()
-        if name not in self._processMap:
-            iprot.skip(TType.STRUCT)
-            iprot.readMessageEnd()
-            x=TApplicationException(TApplicationException.UNKNOWN_METHOD,'Unknown function %s'%(name))
-            oprot.writeMessageBegin(name,TMessageType.EXCEPTION,seqid)
-            x.write(oprot)
-            oprot.writeMessageEnd()
-            oprot.trans.flush()
-            return
-        else:self._processMap[name](self,seqid,iprot,oprot)
-        return True
-    def process_notify(self,seqid,iprot,oprot):
-        args=notify_args()
-        args.read(iprot)
-        iprot.readMessageEnd()
-        result=notify_result()
+class UniversalNotificationService:
+    """نظام الإشعارات الموحد"""
+    
+    def __init__(self, api: MessagingApi):
+        self.api = api
+        self.handlers: Dict[str, Callable] = {}
+        self.notification_log: List[dict] = []
+        self._setup_default_handlers()
+    
+    def notify(self, event: dict):
+        """
+        إرسال إشعار للحدث
+        
+        Args:
+            event: {
+                'type': 'EVENT_TYPE',
+                'target': 'user_or_group_id',
+                'data': {...}
+            }
+        """
+        event_type = event.get('type', 'UNKNOWN')
+        target = event.get('target')
+        
+        # تسجيل الإشعار
+        self._log_notification(event)
+        
+        # معالجة الحدث
+        if event_type in self.handlers:
+            try:
+                message = self.handlers[event_type](event)
+                if message and target:
+                    self._send_notification(target, message)
+            except Exception as e:
+                print(f"❌ خطأ في معالجة الإشعار: {e}")
+        else:
+            print(f"⚠️ نوع حدث غير معروف: {event_type}")
+    
+    def register_handler(self, event_type: str, handler: Callable):
+        """تسجيل معالج لنوع حدث معين"""
+        self.handlers[event_type] = handler
+        print(f"✅ تم تسجيل معالج: {event_type}")
+    
+    def _setup_default_handlers(self):
+        """إعداد المعالجات الافتراضية"""
+        
+        self.handlers['MESSAGE_SENT'] = lambda e: \
+            f"📨 رسالة جديدة من {e['data'].get('sender', 'مجهول')}"
+        
+        self.handlers['MEMBER_JOINED'] = lambda e: \
+            f"👋 انضم {e['data'].get('name', 'عضو جديد')} للقروب"
+        
+        self.handlers['MEMBER_LEFT'] = lambda e: \
+            f"👋 غادر {e['data'].get('name', 'عضو')} القروب"
+        
+        self.handlers['GROUP_CREATED'] = lambda e: \
+            f"🎉 تم إنشاء القروب: {e['data'].get('name', 'قروب جديد')}"
+        
+        self.handlers['USER_WARNED'] = lambda e: \
+            f"⚠️ تحذير: {e['data'].get('reason', 'مخالفة القواعد')}"
+        
+        self.handlers['USER_KICKED'] = lambda e: \
+            f"⛔ تم طرد {e['data'].get('user', 'مستخدم')}"
+        
+        self.handlers['SPAM_DETECTED'] = lambda e: \
+            f"🚨 تم كشف سبام: {e['data'].get('count', 0)} رسائل"
+        
+        self.handlers['URL_BLOCKED'] = lambda e: \
+            f"🔗 تم حظر رابط مشبوه"
+        
+        self.handlers['SYSTEM_ALERT'] = lambda e: \
+            f"🔔 تنبيه: {e['data'].get('message', 'تنبيه نظام')}"
+    
+    def _send_notification(self, target: str, message: str):
+        """إرسال الإشعار عبر LINE"""
         try:
-            self._handler.notify(args.event)
-            msg_type=TMessageType.REPLY
-        except TTransport.TTransportException:raise
-        except UniversalNotificationServiceException as e:
-            msg_type=TMessageType.REPLY
-            result.e=e
-        except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
-            msg_type=TMessageType.EXCEPTION
-            result=ex
-        except Exception:
-            logging.exception('Unexpected exception in handler')
-            msg_type=TMessageType.EXCEPTION
-            result=TApplicationException(TApplicationException.INTERNAL_ERROR,'Internal error')
-        oprot.writeMessageBegin("notify",msg_type,seqid)
-        result.write(oprot)
-        oprot.writeMessageEnd()
-        oprot.trans.flush()
+            self.api.push_message(
+                PushMessageRequest(
+                    to=target,
+                    messages=[TextMessage(text=message)]
+                )
+            )
+            print(f"✅ تم إرسال الإشعار إلى: {target}")
+        except Exception as e:
+            print(f"❌ فشل إرسال الإشعار: {e}")
+    
+    def _log_notification(self, event: dict):
+        """تسجيل الإشعار في السجل"""
+        log_entry = {
+            'timestamp': datetime.now().isoformat(),
+            'type': event.get('type'),
+            'target': event.get('target'),
+            'data': event.get('data')
+        }
+        
+        self.notification_log.append(log_entry)
+        
+        # الاحتفاظ بآخر 1000 سجل فقط
+        if len(self.notification_log) > 1000:
+            self.notification_log = self.notification_log[-1000:]
+    
+    def get_notification_history(self, limit: int = 50) -> List[dict]:
+        """
+        الحصول على سجل الإشعارات
+        
+        Args:
+            limit: عدد السجلات المطلوبة
+        
+        Returns:
+            List[dict]: قائمة الإشعارات
+        """
+        return self.notification_log[-limit:]
+    
+    def get_stats(self) -> dict:
+        """الحصول على إحصائيات الإشعارات"""
+        event_counts = {}
+        for entry in self.notification_log:
+            event_type = entry['type']
+            event_counts[event_type] = event_counts.get(event_type, 0) + 1
+        
+        return {
+            'totalNotifications': len(self.notification_log),
+            'eventCounts': event_counts,
+            'registeredHandlers': len(self.handlers),
+            'lastNotification': self.notification_log[-1] if self.notification_log else None
+        }
+    
+    def broadcast(self, targets: List[str], message: str):
+        """
+        إرسال إشعار جماعي
+        
+        Args:
+            targets: قائمة المستلمين
+            message: نص الرسالة
+        """
+        for target in targets:
+            self._send_notification(target, message)
+    
+    def send_custom_notification(self, target: str, title: str, 
+                                 body: str, icon: str = "🔔"):
+        """
+        إرسال إشعار مخصص
+        
+        Args:
+            target: المستلم
+            title: عنوان الإشعار
+            body: محتوى الإشعار
+            icon: أيقونة الإشعار
+        """
+        message = f"{icon} {title}\n\n{body}"
+        self._send_notification(target, message)
 
-# دوال ومكونات مساعدة
-class notify_args(object):
-    """الخصائص: - event"""
-    def __init__(self,event=None,):
-        self.event=event
-    def read(self,iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans,TTransport.CReadableTransport)and self.thrift_spec is not None:
-            iprot._fast_decode(self,iprot,[self.__class__,self.thrift_spec])
-            return
-        iprot.readStructBegin()
-        while True:
-            (fname,ftype,fid)=iprot.readFieldBegin()
-            if ftype==TType.STOP:break
-            if fid==2:
-                if ftype==TType.STRUCT:
-                    self.event=GlobalEvent()
-                    self.event.read(iprot)
-                else:iprot.skip(ftype)
-            else:iprot.skip(ftype)
-            iprot.readFieldEnd()
-        iprot.readStructEnd()
-    def write(self,oprot):
-        if oprot._fast_encode is not None and self.thrift_spec is not None:
-            oprot.trans.write(oprot._fast_encode(self,[self.__class__,self.thrift_spec]))
-            return
-        oprot.writeStructBegin('notify_args')
-        if self.event is not None:
-            oprot.writeFieldBegin('event',TType.STRUCT,2)
-            self.event.write(oprot)
-            oprot.writeFieldEnd()
-        oprot.writeFieldStop()
-        oprot.writeStructEnd()
-    def validate(self):return
-    def __repr__(self):
-        L=['%s=%r'%(key,value)for key,value in self.__dict__.items()]
-        return '%s(%s)'%(self.__class__.__name__,', '.join(L))
-    def __eq__(self,other):return isinstance(other,self.__class__)and self.__dict__==other.__dict__
-    def __ne__(self,other):return not(self==other)
-all_structs.append(notify_args)
-notify_args.thrift_spec=(None,None,(2,TType.STRUCT,'event',[GlobalEvent,None],None,),)
-
-class notify_result(object):
-    """الخصائص: - e"""
-    def __init__(self,e=None,):
-        self.e=e
-    def read(self,iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans,TTransport.CReadableTransport)and self.thrift_spec is not None:
-            iprot._fast_decode(self,iprot,[self.__class__,self.thrift_spec])
-            return
-        iprot.readStructBegin()
-        while True:
-            (fname,ftype,fid)=iprot.readFieldBegin()
-            if ftype==TType.STOP:break
-            if fid==1:
-                if ftype==TType.STRUCT:
-                    self.e=UniversalNotificationServiceException()
-                    self.e.read(iprot)
-                else:iprot.skip(ftype)
-            else:iprot.skip(ftype)
-            iprot.readFieldEnd()
-        iprot.readStructEnd()
-    def write(self,oprot):
-        if oprot._fast_encode is not None and self.thrift_spec is not None:
-            oprot.trans.write(oprot._fast_encode(self,[self.__class__,self.thrift_spec]))
-            return
-        oprot.writeStructBegin('notify_result')
-        if self.e is not None:
-            oprot.writeFieldBegin('e',TType.STRUCT,1)
-            self.e.write(oprot)
-            oprot.writeFieldEnd()
-        oprot.writeFieldStop()
-        oprot.writeStructEnd()
-    def validate(self):return
-    def __repr__(self):
-        L=['%s=%r'%(key,value)for key,value in self.__dict__.items()]
-        return '%s(%s)'%(self.__class__.__name__,', '.join(L))
-    def __eq__(self,other):return isinstance(other,self.__class__)and self.__dict__==other.__dict__
-    def __ne__(self,other):return not(self==other)
-all_structs.append(notify_result)
-notify_result.thrift_spec=(None,(1,TType.STRUCT,'e',[UniversalNotificationServiceException,None],None,),)
-fix_spec(all_structs)
-del all_structs
+# ============ مثال الاستخدام ============
+if __name__ == '__main__':
+    api = MessagingApi(ApiClient())
+    service = UniversalNotificationService(api)
+    
+    # إرسال إشعار عضو جديد
+    service.notify({
+        'type': 'MEMBER_JOINED',
+        'target': 'G1234567890',
+        'data': {'name': 'أحمد'}
+    })
+    
+    # إرسال تحذير
+    service.notify({
+        'type': 'USER_WARNED',
+        'target': 'U1234567890',
+        'data': {'reason': 'إرسال روابط'}
+    })
+    
+    # تسجيل معالج مخصص
+    service.register_handler(
+        'CUSTOM_EVENT',
+        lambda e: f"🎯 حدث مخصص: {e['data'].get('message')}"
+    )
+    
+    # الحصول على الإحصائيات
+    stats = service.get_stats()
+    print(f"📊 إجمالي الإشعارات: {stats['totalNotifications']}")
+    print(f"📝 المعالجات المسجلة: {stats['registeredHandlers']}")
