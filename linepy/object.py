@@ -3,6 +3,7 @@ from datetime import datetime
 import json, time, ntpath
 
 def loggedIn(func):
+    """مُزخرِف للتحقق من تسجيل الدخول قبل تنفيذ الدالة"""
     def checkLogin(*args, **kwargs):
         if args[0].isLogin:
             return func(*args, **kwargs)
@@ -11,15 +12,29 @@ def loggedIn(func):
     return checkLogin
     
 class Object(object):
+    """
+    فئة الكائنات للتعامل مع رفع وتنزيل الوسائط (صور، فيديوهات، ملفات)
+    """
 
     def __init__(self):
+        """تهيئة الكائن وتسجيل نجاح تسجيل الدخول"""
         if self.isLogin == True:
             self.log("[%s] : Login success" % self.profile.displayName)
 
-    """Group"""
+    """وظائف المجموعات"""
 
     @loggedIn
     def updateGroupPicture(self, groupId, path):
+        """
+        تحديث صورة المجموعة
+        
+        المعاملات:
+            groupId: معرف المجموعة
+            path: مسار الصورة الجديدة
+        
+        العائد:
+            True عند النجاح
+        """
         files = {'file': open(path, 'rb')}
         data = {'params': self.genOBSParams({'oid': groupId,'type': 'image'})}
         r = self.server.postContent(self.server.LINE_OBS_DOMAIN + '/talk/g/upload.nhn', data=data, files=files)
@@ -27,10 +42,20 @@ class Object(object):
             raise Exception('Update group picture failure.')
         return True
 
-    """Personalize"""
+    """وظائف التخصيص الشخصي"""
 
     @loggedIn
     def updateProfilePicture(self, path, type='p'):
+        """
+        تحديث صورة الملف الشخصي
+        
+        المعاملات:
+            path: مسار الصورة الجديدة
+            type: نوع الصورة ('p' للصورة العادية، 'vp' لصورة الفيديو)
+        
+        العائد:
+            True عند النجاح
+        """
         files = {'file': open(path, 'rb')}
         params = {'oid': self.profile.mid,'type': 'image'}
         if type == 'vp':
@@ -43,6 +68,16 @@ class Object(object):
         
     @loggedIn
     def updateProfileVideoPicture(self, path):
+        """
+        تحديث صورة الفيديو للملف الشخصي
+        يتطلب تثبيت FFmpeg و ffmpy
+        
+        المعاملات:
+            path: مسار ملف الفيديو
+        
+        العائد:
+            True عند النجاح
+        """
         try:
             from ffmpy import FFmpeg
             files = {'file': open(path, 'rb')}
@@ -59,6 +94,16 @@ class Object(object):
 
     @loggedIn
     def updateProfileCover(self, path, returnAs='bool'):
+        """
+        تحديث صورة غلاف الملف الشخصي
+        
+        المعاملات:
+            path: مسار الصورة
+            returnAs: نوع الإرجاع ('objId' أو 'bool')
+        
+        العائد:
+            معرف الكائن أو True حسب returnAs
+        """
         if returnAs not in ['objId','bool']:
             raise Exception('Invalid returnAs value')
         objId = self.uploadObjHome(path, type='image', returnAs='objId')
@@ -68,10 +113,22 @@ class Object(object):
         elif returnAs == 'bool':
             return True
 
-    """Object"""
+    """وظائف الكائنات - رفع الملفات"""
 
     @loggedIn
     def uploadObjSquare(self, squareChatMid, path, type='image', returnAs='bool'):
+        """
+        رفع كائن إلى محادثة المربع (Square)
+        
+        المعاملات:
+            squareChatMid: معرف محادثة المربع
+            path: مسار الملف
+            type: نوع الملف ('image', 'gif', 'video', 'audio', 'file')
+            returnAs: نوع الإرجاع
+        
+        العائد:
+            True عند النجاح
+        """
         if returnAs not in ['bool']:
             raise Exception('Invalid returnAs value')
         if type not in ['image','gif','video','audio','file']:
@@ -109,6 +166,19 @@ class Object(object):
 
     @loggedIn
     def uploadObjTalk(self, path, type='image', returnAs='bool', objId=None, to=None):
+        """
+        رفع كائن إلى محادثة عادية
+        
+        المعاملات:
+            path: مسار الملف
+            type: نوع الملف ('image', 'gif', 'video', 'audio', 'file')
+            returnAs: نوع الإرجاع ('objId' أو 'bool')
+            objId: معرف الكائن (اختياري)
+            to: معرف المستلم (مطلوب لـ GIF)
+        
+        العائد:
+            معرف الكائن أو True حسب returnAs
+        """
         if returnAs not in ['objId','bool']:
             raise Exception('Invalid returnAs value')
         if type not in ['image','gif','video','audio','file']:
@@ -145,6 +215,18 @@ class Object(object):
 
     @loggedIn
     def uploadObjHome(self, path, type='image', returnAs='bool', objId=None):
+        """
+        رفع كائن إلى الصفحة الرئيسية (Timeline)
+        
+        المعاملات:
+            path: مسار الملف
+            type: نوع الملف ('image', 'video', 'audio')
+            returnAs: نوع الإرجاع ('objId' أو 'bool')
+            objId: معرف الكائن (اختياري)
+        
+        العائد:
+            معرف الكائن أو True حسب returnAs
+        """
         if returnAs not in ['objId','bool']:
             raise Exception('Invalid returnAs value')
         if type not in ['image','video','audio']:
@@ -177,8 +259,21 @@ class Object(object):
         elif returnAs == 'bool':
             return True
 
+    """وظائف الكائنات - تنزيل الملفات"""
+
     @loggedIn
     def downloadObjectMsg(self, messageId, returnAs='path', saveAs=''):
+        """
+        تنزيل كائن من رسالة
+        
+        المعاملات:
+            messageId: معرف الرسالة
+            returnAs: نوع الإرجاع ('path', 'bool', 'bin')
+            saveAs: مسار الحفظ (اختياري)
+        
+        العائد:
+            المسار، منطقي، أو البيانات الثنائية حسب returnAs
+        """
         if saveAs == '':
             saveAs = self.genTempFile('path')
         if returnAs not in ['path','bool','bin']:
@@ -199,6 +294,17 @@ class Object(object):
 
     @loggedIn
     def forwardObjectMsg(self, to, msgId, contentType='image'):
+        """
+        إعادة توجيه كائن من رسالة
+        
+        المعاملات:
+            to: معرف المستلم
+            msgId: معرف الرسالة الأصلية
+            contentType: نوع المحتوى ('image', 'video', 'audio')
+        
+        العائد:
+            True عند النجاح
+        """
         if contentType not in ['image','video','audio']:
             raise Exception('Type not valid.')
         data = self.genOBSParams({'oid': 'reqseq','reqseq': self.revision,'type': contentType,'copyFrom': '/talk/m/%s' % msgId},'default')
