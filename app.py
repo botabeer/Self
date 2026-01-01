@@ -1,88 +1,73 @@
 # -*- coding: utf-8 -*-
 """
-بوت LINE للحماية - نسخة Worker
-تعمل مع linepy (بدون حاجة لـ Flask)
-مناسبة لـ Render Background Worker
+بوت LINE للحماية - النسخة النهائية
+Flask + LINE Bot SDK الرسمي
+Compatible with Render.com
 """
 
-from linepy import LINE, OEPoll
-import time
-import json
 import os
-import sys
+import json
+import time
 from datetime import datetime
+from flask import Flask, request, abort
 
-# ========== التهيئة ==========
-class ProtectionBot:
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError, LineBotApiError
+from linebot.models import (
+    MessageEvent, TextMessage, TextSendMessage,
+    JoinEvent, LeaveEvent, MemberJoinedEvent, MemberLeftEvent
+)
+
+# ========== Flask Setup ==========
+app = Flask(__name__)
+
+# ========== LINE Credentials ==========
+CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', '')
+CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET', '')
+
+if not CHANNEL_ACCESS_TOKEN or not CHANNEL_SECRET:
+    print("="*50)
+    print("❌ خطأ: بيانات LINE غير موجودة!")
+    print("أضف في Render Environment:")
+    print("  LINE_CHANNEL_ACCESS_TOKEN=...")
+    print("  LINE_CHANNEL_SECRET=...")
+    print("="*50)
+    exit(1)
+
+line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(CHANNEL_SECRET)
+
+# ========== Data Storage ==========
+class Database:
     def __init__(self):
-        print("\n" + "="*50)
-        print("🤖 بوت LINE للحماية - نسخة Worker")
-        print("="*50)
-        
-        # تسجيل الدخول
-        try:
-            # دعم أسماء متعددة للتوكن
-            token = (os.getenv('LINE_TOKEN', '') or 
-                    os.getenv('LINE_CHANNEL_ACCESS_TOKEN', '') or
-                    os.getenv('CHANNEL_ACCESS_TOKEN', ''))
-            email = os.getenv('LINE_EMAIL', '')
-            password = os.getenv('LINE_PASSWORD', '')
-            
-            if token:
-                print("🔐 تسجيل الدخول بالـ Token...")
-                self.client = LINE(token)
-            elif email and password:
-                print("🔐 تسجيل الدخول بالبريد...")
-                self.client = LINE(email, password)
-            else:
-                print("❌ لم يتم تعيين بيانات تسجيل الدخول!")
-                print("   أضف واحد من:")
-                print("   - LINE_TOKEN")
-                print("   - LINE_CHANNEL_ACCESS_TOKEN")
-                print("   - LINE_EMAIL + LINE_PASSWORD")
-                sys.exit(1)
-            
-            self.poll = OEPoll(self.client)
-            self.mid = self.client.profile.mid
-            self.name = self.client.profile.displayName
-            
-            print(f"✅ تم تسجيل الدخول: {self.name}")
-            print(f"✅ المعرف: {self.mid}")
-        
-        except Exception as e:
-            print(f"❌ فشل تسجيل الدخول: {e}")
-            sys.exit(1)
-        
-        # تحميل البيانات
-        self.owners = self.load_json('owners.json', {})
-        self.admins = self.load_json('admins.json', {})
-        self.banned = self.load_json('banned.json', {})
-        
-        # الإعدادات
-        self.protect = True
-        self.kick_protect = True
-        self.invite_protect = True
-        self.qr_protect = True
-        self.auto_join = True
-        self.welcome = True
-        
+        self.owners = self.load('owners.json', {})
+        self.admins = self.load('admins.json', {})
+        self.banned = self.load('banned.json', {})
+        self.settings = {
+            'protect': True,
+            'kick_protect': True,
+            'invite_protect': True,
+            'welcome': True
+        }
         self.start_time = time.time()
-        
-        print(f"✅ مالكين: {len(self.owners)}")
-        print(f"✅ أدمن: {len(self.admins)}")
-        print(f"✅ محظورين: {len(self.banned)}")
-        print("="*50 + "\n")
+        print("="*50)
+        print("✅ تم تحميل البيانات:")
+        print(f"   👑 مالكين: {len(self.owners)}")
+        print(f"   👮 أدمن: {len(self.admins)}")
+        print(f"   🚫 محظورين: {len(self.banned)}")
+        print("="*50)
     
-    def load_json(self, filename, default):
+    def load(self, filename, default):
         try:
             if os.path.exists(filename):
                 with open(filename, 'r', encoding='utf-8') as f:
-                    return json.load(f) or default
+                    data = json.load(f)
+                    return data if data else default
             return default
         except:
             return default
     
-    def save_data(self):
+    def save(self):
         try:
             with open('owners.json', 'w', encoding='utf-8') as f:
                 json.dump(self.owners, f, indent=2, ensure_ascii=False)
@@ -92,293 +77,304 @@ class ProtectionBot:
                 json.dump(self.banned, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"❌ خطأ في الحفظ: {e}")
+
+db = Database()
+
+# ========== Helper Functions ==========
+def is_owner(user_id):
+    return user_id in db.owners
+
+def is_admin(user_id):
+    return user_id in db.owners or user_id in db.admins
+
+def get_runtime():
+    elapsed = int(time.time() - db.start_time)
+    h = elapsed // 3600
+    m = (elapsed % 3600) // 60
+    s = elapsed % 60
+    return f"{h}س {m}د {s}ث"
+
+def send_message(to, text):
+    try:
+        line_bot_api.push_message(to, TextSendMessage(text=text))
+    except Exception as e:
+        print(f"❌ خطأ في الإرسال: {e}")
+
+# ========== Command Handler ==========
+def handle_command(event):
+    text = event.message.text.strip()
+    cmd = text.lower()
+    user_id = event.source.user_id
     
-    def is_owner(self, uid):
-        return uid in self.owners
+    # تحديد وجهة الرد
+    if event.source.type == 'group':
+        to = event.source.group_id
+    elif event.source.type == 'room':
+        to = event.source.room_id
+    else:
+        to = user_id
     
-    def is_admin(self, uid):
-        return uid in self.owners or uid in self.admins
+    # ========== الأوامر ==========
     
-    def get_runtime(self):
-        t = int(time.time() - self.start_time)
-        h = t // 3600
-        m = (t % 3600) // 60
-        s = t % 60
-        return f"{h}س {m}د {s}ث"
-    
-    def send(self, to, msg):
-        try:
-            self.client.sendMessage(to, msg)
-        except Exception as e:
-            print(f"❌ خطأ في الإرسال: {e}")
-    
-    # ========== معالجات الحماية ==========
-    def handle_kick(self, op):
-        """حماية من الطرد"""
-        if not self.kick_protect:
-            return
-        
-        try:
-            gid = op.param1
-            kicker = op.param2
-            kicked = op.param3
-            
-            # إذا طردوا البوت
-            if kicked == self.mid:
-                if not self.is_owner(kicker):
-                    print(f"⚠️ تم طرد البوت من {gid} بواسطة {kicker}")
-                    # محاولة العودة وطرد المعتدي
-                    time.sleep(1)
-                    # هنا تحتاج إلى منطق إعادة الانضمام
-                    self.banned[kicker] = True
-                    self.save_data()
-            
-            # إذا طردوا أدمن/مالك
-            elif self.is_admin(kicked):
-                if not self.is_owner(kicker):
-                    print(f"⚠️ طرد أدمن في {gid}")
-                    self.client.kickoutFromGroup(gid, [kicker])
-                    self.banned[kicker] = True
-                    self.save_data()
-                    self.send(gid, "⚠️ تم طرد المعتدي تلقائياً")
-                    # إعادة دعوة المطرود
-                    try:
-                        self.client.inviteIntoGroup(gid, [kicked])
-                    except:
-                        pass
-        
-        except Exception as e:
-            print(f"❌ خطأ handle_kick: {e}")
-    
-    def handle_invite(self, op):
-        """حماية الدعوات"""
-        try:
-            gid = op.param1
-            inviter = op.param2
-            invited = op.param3
-            
-            # إذا دعوا البوت
-            if invited == self.mid:
-                if self.auto_join:
-                    self.client.acceptGroupInvitation(gid)
-                    time.sleep(1)
-                    self.send(gid, "✅ مرحباً! أنا بوت الحماية\nالأوامر: help")
-                return
-            
-            # التحقق من المحظورين
-            if invited in self.banned:
-                self.client.cancelGroupInvitation(gid, [invited])
-                self.send(gid, "⚠️ عضو محظور - تم إلغاء الدعوة")
-                return
-            
-            # حماية الدعوات
-            if self.invite_protect:
-                if not self.is_admin(inviter):
-                    self.client.cancelGroupInvitation(gid, [invited])
-                    self.client.kickoutFromGroup(gid, [inviter])
-                    self.banned[inviter] = True
-                    self.save_data()
-                    self.send(gid, "⚠️ دعوة غير مصرح بها")
-        
-        except Exception as e:
-            print(f"❌ خطأ handle_invite: {e}")
-    
-    def handle_qr(self, op):
-        """حماية الرابط"""
-        if not self.qr_protect:
-            return
-        
-        try:
-            gid = op.param1
-            opener = op.param2
-            
-            if not self.is_admin(opener):
-                # إغلاق الرابط
-                group = self.client.getGroup(gid)
-                group.preventedJoinByTicket = True
-                self.client.updateGroup(group)
-                
-                # طرد الفاعل
-                self.client.kickoutFromGroup(gid, [opener])
-                self.banned[opener] = True
-                self.save_data()
-                self.send(gid, "⚠️ تم إغلاق الرابط وطرد المعتدي")
-        
-        except Exception as e:
-            print(f"❌ خطأ handle_qr: {e}")
-    
-    # ========== معالج الأوامر ==========
-    def handle_command(self, msg):
-        try:
-            text = msg.text
-            if not text:
-                return
-            
-            text = text.strip()
-            cmd = text.lower()
-            sender = msg._from
-            to = msg.to if msg.toType == 2 else sender
-            
-            # الأوامر
-            if cmd == 'help' or cmd == 'الأوامر':
-                help_txt = """╔════════════════
+    if cmd == 'help' or cmd == 'الأوامر':
+        help_text = """╔════════════════════
 ║ 🤖 بوت الحماية
 ║
 ║ 📋 عامة:
 ║ • help - الأوامر
 ║ • status - الحالة
+║ • myid - معرفي
 ║ • time - الوقت
-║ • ping - اختبار
 ║
 ║ 👮 أدمن:
 ║ • protect on/off
-║ • kick @user
-║ • ban @user
 ║ • adminlist
 ║
 ║ 👑 مالك:
 ║ • addadmin USER_ID
 ║ • deladmin USER_ID
+║ • addowner USER_ID
 ║ • banlist
 ║ • clearban
 ║
-╚════════════════"""
-                self.send(to, help_txt)
-            
-            elif cmd == 'status' or cmd == 'الحالة':
-                status = f"""╔════════════════
-║ 📊 الحالة
+╚════════════════════"""
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=help_text))
+    
+    elif cmd == 'status' or cmd == 'الحالة':
+        status = f"""╔════════════════════
+║ 📊 حالة البوت
 ║
-║ ⏰ {self.get_runtime()}
-║ 👑 مالكين: {len(self.owners)}
-║ 👮 أدمن: {len(self.admins)}
-║ 🚫 محظورين: {len(self.banned)}
+║ ⏰ التشغيل: {get_runtime()}
+║ 👑 مالكين: {len(db.owners)}
+║ 👮 أدمن: {len(db.admins)}
+║ 🚫 محظورين: {len(db.banned)}
 ║
 ║ 🛡️ الحماية:
-║ • طرد: {'✅' if self.kick_protect else '❌'}
-║ • دعوات: {'✅' if self.invite_protect else '❌'}
-║ • رابط: {'✅' if self.qr_protect else '❌'}
+║ • طرد: {'✅' if db.settings['kick_protect'] else '❌'}
+║ • دعوات: {'✅' if db.settings['invite_protect'] else '❌'}
 ║
-╚════════════════"""
-                self.send(to, status)
-            
-            elif cmd == 'time' or cmd == 'الوقت':
-                now = datetime.now()
-                self.send(to, f"🕐 {now.strftime('%Y-%m-%d %H:%M:%S')}")
-            
-            elif cmd == 'ping':
-                self.send(to, "🏓 Pong!")
-            
-            elif cmd == 'protect on' and self.is_admin(sender):
-                self.protect = self.kick_protect = self.invite_protect = self.qr_protect = True
-                self.send(to, "✅ تم تفعيل الحماية")
-            
-            elif cmd == 'protect off' and self.is_admin(sender):
-                self.protect = self.kick_protect = self.invite_protect = self.qr_protect = False
-                self.send(to, "⚠️ تم إيقاف الحماية")
-            
-            elif cmd == 'adminlist' and self.is_admin(sender):
-                if not self.admins:
-                    self.send(to, "❌ لا يوجد أدمن")
-                else:
-                    msg_txt = "╔════════════════\n║ 👮 الأدمن\n║\n"
-                    for i, aid in enumerate(self.admins.keys(), 1):
-                        try:
-                            name = self.client.getContact(aid).displayName
-                            msg_txt += f"║ {i}. {name}\n"
-                        except:
-                            msg_txt += f"║ {i}. {aid}\n"
-                    msg_txt += "╚════════════════"
-                    self.send(to, msg_txt)
-            
-            elif cmd.startswith('addadmin') and self.is_owner(sender):
-                parts = text.split()
-                if len(parts) == 2:
-                    uid = parts[1]
-                    self.admins[uid] = True
-                    self.save_data()
-                    self.send(to, "✅ تمت إضافة أدمن")
-                else:
-                    self.send(to, "📝 استخدم: addadmin USER_ID")
-            
-            elif cmd.startswith('deladmin') and self.is_owner(sender):
-                parts = text.split()
-                if len(parts) == 2:
-                    uid = parts[1]
-                    if uid in self.admins:
-                        del self.admins[uid]
-                        self.save_data()
-                        self.send(to, "✅ تم حذف الأدمن")
-                else:
-                    self.send(to, "📝 استخدم: deladmin USER_ID")
-            
-            elif cmd == 'banlist' and self.is_owner(sender):
-                if not self.banned:
-                    self.send(to, "❌ قائمة فارغة")
-                else:
-                    msg_txt = f"╔════════════════\n║ 🚫 المحظورين ({len(self.banned)})\n║\n"
-                    for i, bid in enumerate(list(self.banned.keys())[:20], 1):
-                        try:
-                            name = self.client.getContact(bid).displayName
-                            msg_txt += f"║ {i}. {name}\n"
-                        except:
-                            msg_txt += f"║ {i}. {bid[:10]}...\n"
-                    msg_txt += "╚════════════════"
-                    self.send(to, msg_txt)
-            
-            elif cmd == 'clearban' and self.is_owner(sender):
-                self.banned = {}
-                self.save_data()
-                self.send(to, "✅ تم مسح القائمة")
-        
-        except Exception as e:
-            print(f"❌ خطأ handle_command: {e}")
+╚════════════════════"""
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=status))
     
-    # ========== الحلقة الرئيسية ==========
-    def run(self):
-        print("🚀 البوت يعمل...\n")
-        
-        while True:
-            try:
-                ops = self.poll.singleTrace(count=50)
-                
-                if ops:
-                    for op in ops:
-                        try:
-                            # [13] دعوة
-                            if op.type == 13:
-                                self.handle_invite(op)
-                            
-                            # [19] طرد
-                            elif op.type == 19:
-                                self.handle_kick(op)
-                            
-                            # [11] فتح رابط
-                            elif op.type == 11:
-                                self.handle_qr(op)
-                            
-                            # [26] رسالة نصية
-                            elif op.type == 26:
-                                if op.message and op.message.text:
-                                    self.handle_command(op.message)
-                            
-                            # تحديث المراجعة
-                            self.poll.setRevision(op.revision)
-                        
-                        except Exception as e:
-                            print(f"❌ خطأ في معالجة العملية: {e}")
-                            continue
-            
-            except KeyboardInterrupt:
-                print("\n👋 توقف البوت...")
-                self.save_data()
-                break
-            
-            except Exception as e:
-                print(f"❌ خطأ في الحلقة: {e}")
-                time.sleep(2)
+    elif cmd == 'myid' or cmd == 'معرفي':
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=f"📱 معرفك:\n{user_id}")
+        )
+    
+    elif cmd == 'time' or cmd == 'الوقت':
+        now = datetime.now()
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=f"🕐 {now.strftime('%Y-%m-%d %H:%M:%S')}")
+        )
+    
+    elif cmd == 'protect on' and is_admin(user_id):
+        db.settings['protect'] = True
+        db.settings['kick_protect'] = True
+        db.settings['invite_protect'] = True
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ تم تفعيل الحماية"))
+    
+    elif cmd == 'protect off' and is_admin(user_id):
+        db.settings['protect'] = False
+        db.settings['kick_protect'] = False
+        db.settings['invite_protect'] = False
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ تم إيقاف الحماية"))
+    
+    elif cmd == 'adminlist' and is_admin(user_id):
+        if not db.admins:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ لا يوجد أدمن"))
+        else:
+            admin_text = "╔════════════════════\n║ 👮 قائمة الأدمن\n║\n"
+            for i, admin_id in enumerate(db.admins.keys(), 1):
+                admin_text += f"║ {i}. {admin_id[:15]}...\n"
+            admin_text += "╚════════════════════"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=admin_text))
+    
+    elif cmd.startswith('addadmin') and is_owner(user_id):
+        parts = text.split()
+        if len(parts) == 2:
+            new_admin = parts[1]
+            db.admins[new_admin] = True
+            db.save()
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ تمت إضافة أدمن"))
+        else:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="📝 استخدم: addadmin USER_ID\nاحصل على ID من: myid")
+            )
+    
+    elif cmd.startswith('deladmin') and is_owner(user_id):
+        parts = text.split()
+        if len(parts) == 2:
+            admin_id = parts[1]
+            if admin_id in db.admins:
+                del db.admins[admin_id]
+                db.save()
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ تم حذف الأدمن"))
+        else:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="📝 استخدم: deladmin USER_ID"))
+    
+    elif cmd.startswith('addowner') and is_owner(user_id):
+        parts = text.split()
+        if len(parts) == 2:
+            new_owner = parts[1]
+            db.owners[new_owner] = True
+            db.save()
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ تمت إضافة مالك"))
+        else:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="📝 استخدم: addowner USER_ID"))
+    
+    elif cmd == 'banlist' and is_owner(user_id):
+        if not db.banned:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ قائمة المحظورين فارغة"))
+        else:
+            ban_text = f"╔════════════════════\n║ 🚫 المحظورين ({len(db.banned)})\n║\n"
+            for i, ban_id in enumerate(list(db.banned.keys())[:15], 1):
+                ban_text += f"║ {i}. {ban_id[:15]}...\n"
+            ban_text += "╚════════════════════"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=ban_text))
+    
+    elif cmd == 'clearban' and is_owner(user_id):
+        db.banned = {}
+        db.save()
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ تم مسح قائمة المحظورين"))
 
-# ========== التشغيل ==========
+# ========== Event Handlers ==========
+
+@handler.add(MessageEvent, message=TextMessage)
+def handle_text_message(event):
+    try:
+        handle_command(event)
+    except Exception as e:
+        print(f"❌ خطأ في معالجة الرسالة: {e}")
+
+@handler.add(JoinEvent)
+def handle_join(event):
+    """عند انضمام البوت لمجموعة"""
+    try:
+        if event.source.type == 'group':
+            group_id = event.source.group_id
+            welcome = """╔════════════════════
+║ 👋 مرحباً!
+║
+║ أنا بوت الحماية
+║ 🛡️ سأحمي مجموعتك
+║
+║ 📋 الأوامر: help
+║ 📱 معرفك: myid
+║
+╚════════════════════"""
+            line_bot_api.push_message(group_id, TextSendMessage(text=welcome))
+            print(f"✅ انضممت لمجموعة: {group_id}")
+    except Exception as e:
+        print(f"❌ خطأ في handle_join: {e}")
+
+@handler.add(MemberJoinedEvent)
+def handle_member_joined(event):
+    """عند انضمام عضو جديد"""
+    try:
+        if event.source.type == 'group':
+            group_id = event.source.group_id
+            for member in event.joined.members:
+                user_id = member.user_id
+                # التحقق من المحظورين
+                if user_id in db.banned:
+                    try:
+                        line_bot_api.kick_out_user_from_group(group_id, user_id)
+                        send_message(group_id, "⚠️ تم طرد عضو محظور")
+                        print(f"⚠️ طرد محظور: {user_id}")
+                    except Exception as e:
+                        print(f"❌ فشل الطرد: {e}")
+    except Exception as e:
+        print(f"❌ خطأ في handle_member_joined: {e}")
+
+@handler.add(MemberLeftEvent)
+def handle_member_left(event):
+    """عند مغادرة عضو"""
+    # يمكن إضافة منطق إضافي هنا
+    pass
+
+# ========== Flask Routes ==========
+
+@app.route("/", methods=['GET'])
+def home():
+    return f"""
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>LINE Bot</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                text-align: center;
+                padding: 50px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }}
+            .container {{
+                background: rgba(255,255,255,0.1);
+                border-radius: 20px;
+                padding: 30px;
+                max-width: 600px;
+                margin: 0 auto;
+                backdrop-filter: blur(10px);
+            }}
+            h1 {{ font-size: 3em; margin: 0; }}
+            .status {{ font-size: 1.5em; margin: 20px 0; }}
+            .info {{ margin: 10px 0; opacity: 0.9; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🤖</h1>
+            <div class="status">✅ البوت يعمل</div>
+            <hr style="border: 1px solid rgba(255,255,255,0.3);">
+            <div class="info">🛡️ LINE Protection Bot v2.0</div>
+            <div class="info">⏰ التشغيل: {get_runtime()}</div>
+            <div class="info">👑 مالكين: {len(db.owners)}</div>
+            <div class="info">👮 أدمن: {len(db.admins)}</div>
+        </div>
+    </body>
+    </html>
+    """, 200
+
+@app.route("/callback", methods=['POST'])
+def callback():
+    """معالج Webhook من LINE"""
+    signature = request.headers.get('X-Line-Signature', '')
+    body = request.get_data(as_text=True)
+    
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        print("❌ Invalid signature!")
+        abort(400)
+    except Exception as e:
+        print(f"❌ خطأ في callback: {e}")
+    
+    return 'OK'
+
+@app.route("/health", methods=['GET'])
+def health():
+    """فحص صحة البوت"""
+    return {
+        "status": "healthy",
+        "uptime": get_runtime(),
+        "owners": len(db.owners),
+        "admins": len(db.admins),
+        "banned": len(db.banned),
+        "timestamp": datetime.now().isoformat()
+    }, 200
+
+# ========== Startup ==========
 if __name__ == "__main__":
-    bot = ProtectionBot()
-    bot.run()
+    print("\n" + "="*50)
+    print("🤖 بوت LINE للحماية - النسخة النهائية")
+    print("="*50)
+    print("✅ Flask Server")
+    print("✅ LINE Bot SDK v3")
+    print("="*50)
+    
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
