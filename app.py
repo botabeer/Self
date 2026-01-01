@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-بوت LINE للحماية - النسخة النهائية
+بوت LINE للحماية - النسخة النهائية المحدثة
 Flask + LINE Bot SDK الرسمي
 Compatible with Render.com
+يدعم INITIAL_ADMIN_ID من Environment Variables
 """
 
 import os
@@ -24,6 +25,7 @@ app = Flask(__name__)
 # ========== LINE Credentials ==========
 CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', '')
 CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET', '')
+INITIAL_ADMIN_ID = os.getenv('INITIAL_ADMIN_ID', '')  # ✅ جديد
 
 if not CHANNEL_ACCESS_TOKEN or not CHANNEL_SECRET:
     print("="*50)
@@ -31,6 +33,7 @@ if not CHANNEL_ACCESS_TOKEN or not CHANNEL_SECRET:
     print("أضف في Render Environment:")
     print("  LINE_CHANNEL_ACCESS_TOKEN=...")
     print("  LINE_CHANNEL_SECRET=...")
+    print("  INITIAL_ADMIN_ID=...  (اختياري)")
     print("="*50)
     exit(1)
 
@@ -43,6 +46,12 @@ class Database:
         self.owners = self.load('owners.json', {})
         self.admins = self.load('admins.json', {})
         self.banned = self.load('banned.json', {})
+        
+        # ✅ إضافة INITIAL_ADMIN_ID تلقائياً
+        if INITIAL_ADMIN_ID and INITIAL_ADMIN_ID not in self.owners:
+            self.owners[INITIAL_ADMIN_ID] = True
+            print(f"✅ تمت إضافة Admin من Environment: {INITIAL_ADMIN_ID[:20]}...")
+        
         self.settings = {
             'protect': True,
             'kick_protect': True,
@@ -50,11 +59,23 @@ class Database:
             'welcome': True
         }
         self.start_time = time.time()
+        self.bot_user_id = None  # ✅ سيتم تعبئته تلقائياً
+        
+        # محاولة الحصول على Bot User ID
+        try:
+            profile = line_bot_api.get_bot_info()
+            self.bot_user_id = profile.user_id
+            print(f"✅ Bot User ID: {self.bot_user_id}")
+        except Exception as e:
+            print(f"⚠️ لم أستطع الحصول على Bot ID: {e}")
+        
         print("="*50)
         print("✅ تم تحميل البيانات:")
         print(f"   👑 مالكين: {len(self.owners)}")
         print(f"   👮 أدمن: {len(self.admins)}")
         print(f"   🚫 محظورين: {len(self.banned)}")
+        if self.bot_user_id:
+            print(f"   🤖 Bot ID: {self.bot_user_id[:25]}...")
         print("="*50)
     
     def load(self, filename, default):
@@ -124,11 +145,13 @@ def handle_command(event):
 ║ • help - الأوامر
 ║ • status - الحالة
 ║ • myid - معرفي
+║ • botid - معرف البوت
 ║ • time - الوقت
 ║
 ║ 👮 أدمن:
 ║ • protect on/off
 ║ • adminlist
+║ • ownerlist
 ║
 ║ 👑 مالك:
 ║ • addadmin USER_ID
@@ -159,8 +182,24 @@ def handle_command(event):
     elif cmd == 'myid' or cmd == 'معرفي':
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=f"📱 معرفك:\n{user_id}")
+            TextSendMessage(text=f"📱 معرفك:\n{user_id}\n\n💡 انسخه واستخدمه في Render!")
         )
+    
+    elif cmd == 'botid' or cmd == 'معرف البوت':
+        if db.bot_user_id:
+            bot_text = f"""🤖 معرف البوت:
+{db.bot_user_id}
+
+📝 لجعل البوت أدمن:
+1. اذهب لإعدادات المجموعة
+2. اختر 'إدارة الأعضاء'
+3. ابحث عن البوت وارفعه لـ Admin"""
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=bot_text))
+        else:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="⚠️ معرف البوت غير متوفر حالياً")
+            )
     
     elif cmd == 'time' or cmd == 'الوقت':
         now = datetime.now()
@@ -181,13 +220,23 @@ def handle_command(event):
         db.settings['invite_protect'] = False
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ تم إيقاف الحماية"))
     
+    elif cmd == 'ownerlist' and is_admin(user_id):
+        if not db.owners:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ لا يوجد مالكين"))
+        else:
+            owner_text = "╔════════════════════\n║ 👑 قائمة المالكين\n║\n"
+            for i, owner_id in enumerate(db.owners.keys(), 1):
+                owner_text += f"║ {i}. {owner_id[:20]}...\n"
+            owner_text += "╚════════════════════"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=owner_text))
+    
     elif cmd == 'adminlist' and is_admin(user_id):
         if not db.admins:
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ لا يوجد أدمن"))
         else:
             admin_text = "╔════════════════════\n║ 👮 قائمة الأدمن\n║\n"
             for i, admin_id in enumerate(db.admins.keys(), 1):
-                admin_text += f"║ {i}. {admin_id[:15]}...\n"
+                admin_text += f"║ {i}. {admin_id[:20]}...\n"
             admin_text += "╚════════════════════"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=admin_text))
     
@@ -263,6 +312,7 @@ def handle_join(event):
 ║
 ║ 📋 الأوامر: help
 ║ 📱 معرفك: myid
+║ 🤖 معرفي: botid
 ║
 ╚════════════════════"""
             line_bot_api.push_message(group_id, TextSendMessage(text=welcome))
@@ -292,13 +342,13 @@ def handle_member_joined(event):
 @handler.add(MemberLeftEvent)
 def handle_member_left(event):
     """عند مغادرة عضو"""
-    # يمكن إضافة منطق إضافي هنا
     pass
 
 # ========== Flask Routes ==========
 
 @app.route("/", methods=['GET'])
 def home():
+    bot_id_display = db.bot_user_id[:30] + "..." if db.bot_user_id else "غير متوفر"
     return f"""
     <html>
     <head>
@@ -323,6 +373,14 @@ def home():
             h1 {{ font-size: 3em; margin: 0; }}
             .status {{ font-size: 1.5em; margin: 20px 0; }}
             .info {{ margin: 10px 0; opacity: 0.9; }}
+            .bot-id {{ 
+                background: rgba(0,0,0,0.2); 
+                padding: 10px; 
+                border-radius: 5px; 
+                font-family: monospace;
+                font-size: 0.9em;
+                word-break: break-all;
+            }}
         </style>
     </head>
     <body>
@@ -330,10 +388,13 @@ def home():
             <h1>🤖</h1>
             <div class="status">✅ البوت يعمل</div>
             <hr style="border: 1px solid rgba(255,255,255,0.3);">
-            <div class="info">🛡️ LINE Protection Bot v2.0</div>
+            <div class="info">🛡️ LINE Protection Bot v2.1</div>
             <div class="info">⏰ التشغيل: {get_runtime()}</div>
             <div class="info">👑 مالكين: {len(db.owners)}</div>
             <div class="info">👮 أدمن: {len(db.admins)}</div>
+            <hr style="border: 1px solid rgba(255,255,255,0.3);">
+            <div class="info">🤖 Bot ID:</div>
+            <div class="bot-id">{bot_id_display}</div>
         </div>
     </body>
     </html>
@@ -364,6 +425,7 @@ def health():
         "owners": len(db.owners),
         "admins": len(db.admins),
         "banned": len(db.banned),
+        "bot_id": db.bot_user_id,
         "timestamp": datetime.now().isoformat()
     }, 200
 
@@ -376,5 +438,5 @@ if __name__ == "__main__":
     print("✅ LINE Bot SDK v3")
     print("="*50)
     
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port, debug=False)
