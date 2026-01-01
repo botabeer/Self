@@ -1,4 +1,5 @@
+linepy
 rsa
-thrift
+thrift==0.11.0
 requests
 humanfriendly
