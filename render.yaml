@@ -1,16 +1,17 @@
 services:
-  - type: web
-    name: line-protection-bot
+  - type: worker
+    name: line-bot-worker
     env: python
     region: oregon
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: python app.py
+    autoDeploy: true
     envVars:
-      - key: LINE_CHANNEL_ACCESS_TOKEN
+      - key: LINE_TOKEN
         sync: false
-      - key: LINE_CHANNEL_SECRET
-        sync: false
-      - key: PORT
-        value: 10000
-    healthCheckPath: /health
+      # أو استخدم البريد وكلمة المرور:
+      # - key: LINE_EMAIL
+      #   sync: false
+      # - key: LINE_PASSWORD
+      #   sync: false
