@@ -8,7 +8,20 @@ class Bot:
     def __init__(self):
         print("🔄 جاري تسجيل الدخول...")
         try:
-            self.client = LINE()
+            # طريقة 1: استخدام Auth Token (أضف توكنك هنا)
+            token = os.getenv('LINE_TOKEN', '')
+            if token:
+                self.client = LINE(token)
+            else:
+                # طريقة 2: البريد وكلمة المرور
+                email = os.getenv('LINE_EMAIL', '')
+                password = os.getenv('LINE_PASSWORD', '')
+                if email and password:
+                    self.client = LINE(email, password)
+                else:
+                    print("❌ يجب إضافة LINE_TOKEN أو (LINE_EMAIL + LINE_PASSWORD)")
+                    sys.exit(1)
+            
             self.poll = OEPoll(self.client)
             self.mid = self.client.profile.mid
             self.name = self.client.profile.displayName
