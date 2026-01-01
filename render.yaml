@@ -1,14 +1,7 @@
 services:
-  - type: worker
-    name: line-bot-abeer
-    env: python
-    region: oregon
-    plan: free
+  - type: background-worker
+    name: line-bot
+    runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: python app.py
     autoDeploy: true
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.13.4
-      - key: PYTHONUNBUFFERED
-        value: 1
