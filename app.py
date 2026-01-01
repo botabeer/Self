@@ -25,7 +25,7 @@ app = Flask(__name__)
 # ========== LINE Credentials ==========
 CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', '')
 CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET', '')
-INITIAL_ADMIN_ID = os.getenv('INITIAL_ADMIN_ID', '')  # ✅ جديد
+INITIAL_OWNER_ID = os.getenv('INITIAL_OWNER_ID', '')  # ✅ Owner مو Admin
 
 if not CHANNEL_ACCESS_TOKEN or not CHANNEL_SECRET:
     print("="*50)
@@ -33,7 +33,7 @@ if not CHANNEL_ACCESS_TOKEN or not CHANNEL_SECRET:
     print("أضف في Render Environment:")
     print("  LINE_CHANNEL_ACCESS_TOKEN=...")
     print("  LINE_CHANNEL_SECRET=...")
-    print("  INITIAL_ADMIN_ID=...  (اختياري)")
+    print("  INITIAL_OWNER_ID=...  (اختياري - صلاحيات كاملة)")
     print("="*50)
     exit(1)
 
@@ -47,10 +47,14 @@ class Database:
         self.admins = self.load('admins.json', {})
         self.banned = self.load('banned.json', {})
         
-        # ✅ إضافة INITIAL_ADMIN_ID تلقائياً
-        if INITIAL_ADMIN_ID and INITIAL_ADMIN_ID not in self.owners:
-            self.owners[INITIAL_ADMIN_ID] = True
-            print(f"✅ تمت إضافة Admin من Environment: {INITIAL_ADMIN_ID[:20]}...")
+        # ✅ إضافة INITIAL_OWNER_ID تلقائياً كـ Owner (صلاحيات كاملة)
+        if INITIAL_OWNER_ID:
+            if INITIAL_OWNER_ID not in self.owners:
+                self.owners[INITIAL_OWNER_ID] = True
+                self.save()
+                print(f"✅ تمت إضافة Owner من Environment: {INITIAL_OWNER_ID[:20]}...")
+            else:
+                print(f"✅ Owner موجود مسبقاً: {INITIAL_OWNER_ID[:20]}...")
         
         self.settings = {
             'protect': True,
@@ -121,6 +125,27 @@ def send_message(to, text):
     except Exception as e:
         print(f"❌ خطأ في الإرسال: {e}")
 
+def get_mentioned_user_ids(event):
+    """استخراج معرفات المستخدمين من المنشن"""
+    try:
+        if hasattr(event.message, 'mention') and event.message.mention:
+            mentioned_ids = []
+            for mention in event.message.mention.mentionees:
+                if hasattr(mention, 'user_id'):
+                    mentioned_ids.append(mention.user_id)
+            return mentioned_ids
+        return []
+    except:
+        return []
+
+def get_user_display_name(user_id):
+    """الحصول على اسم المستخدم"""
+    try:
+        profile = line_bot_api.get_profile(user_id)
+        return profile.display_name
+    except:
+        return "مستخدم"
+
 # ========== Command Handler ==========
 def handle_command(event):
     text = event.message.text.strip()
@@ -141,24 +166,31 @@ def handle_command(event):
         help_text = """╔════════════════════
 ║ 🤖 بوت الحماية
 ║
-║ 📋 عامة:
+║ 📋 للجميع:
 ║ • help - الأوامر
 ║ • status - الحالة
 ║ • myid - معرفي
 ║ • botid - معرف البوت
 ║ • time - الوقت
 ║
-║ 👮 أدمن:
+║ 👮 Admin (أدمن):
 ║ • protect on/off
 ║ • adminlist
 ║ • ownerlist
 ║
-║ 👑 مالك:
-║ • addadmin USER_ID
-║ • deladmin USER_ID
-║ • addowner USER_ID
+║ 👑 Owner (مالك):
+║ • addadmin @منشن
+║ • deladmin @منشن
+║ • delowner @منشن
+║ • addowner @منشن
+║ • ban @منشن
+║ • unban @منشن
 ║ • banlist
 ║ • clearban
+║
+║ 💡 طريقة الاستخدام:
+║    اكتب الأمر ثم اعمل منشن
+║    مثال: addadmin @احمد
 ║
 ╚════════════════════"""
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=help_text))
@@ -226,7 +258,8 @@ def handle_command(event):
         else:
             owner_text = "╔════════════════════\n║ 👑 قائمة المالكين\n║\n"
             for i, owner_id in enumerate(db.owners.keys(), 1):
-                owner_text += f"║ {i}. {owner_id[:20]}...\n"
+                name = get_user_display_name(owner_id)
+                owner_text += f"║ {i}. {name}\n"
             owner_text += "╚════════════════════"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=owner_text))
     
@@ -236,51 +269,213 @@ def handle_command(event):
         else:
             admin_text = "╔════════════════════\n║ 👮 قائمة الأدمن\n║\n"
             for i, admin_id in enumerate(db.admins.keys(), 1):
-                admin_text += f"║ {i}. {admin_id[:20]}...\n"
+                name = get_user_display_name(admin_id)
+                admin_text += f"║ {i}. {name}\n"
             admin_text += "╚════════════════════"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=admin_text))
     
     elif cmd.startswith('addadmin') and is_owner(user_id):
-        parts = text.split()
-        if len(parts) == 2:
-            new_admin = parts[1]
-            db.admins[new_admin] = True
+        mentioned = get_mentioned_user_ids(event)
+        if mentioned:
+            added = []
+            for new_admin in mentioned:
+                if new_admin not in db.owners:  # لا تضيف Owner كـ Admin
+                    db.admins[new_admin] = True
+                    name = get_user_display_name(new_admin)
+                    added.append(name)
             db.save()
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ تمت إضافة أدمن"))
+            if added:
+                names = "، ".join(added)
+                line_bot_api.reply_message(event.reply_token, 
+                    TextSendMessage(text=f"✅ تمت إضافة أدمن:\n{names}"))
+            else:
+                line_bot_api.reply_message(event.reply_token, 
+                    TextSendMessage(text="⚠️ المستخدمون المحددون هم Owners بالفعل"))
         else:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="📝 استخدم: addadmin USER_ID\nاحصل على ID من: myid")
-            )
+            # دعم الطريقة القديمة (كتابة ID)
+            parts = text.split()
+            if len(parts) == 2 and parts[1].startswith('U'):
+                new_admin = parts[1]
+                db.admins[new_admin] = True
+                db.save()
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ تمت إضافة أدمن"))
+            else:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="📝 اكتب الأمر ثم اعمل منشن:\naddadmin @الشخص")
+                )
     
     elif cmd.startswith('deladmin') and is_owner(user_id):
-        parts = text.split()
-        if len(parts) == 2:
-            admin_id = parts[1]
-            if admin_id in db.admins:
-                del db.admins[admin_id]
-                db.save()
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ تم حذف الأدمن"))
+        mentioned = get_mentioned_user_ids(event)
+        if mentioned:
+            deleted = []
+            for admin_id in mentioned:
+                if admin_id in db.admins:
+                    del db.admins[admin_id]
+                    name = get_user_display_name(admin_id)
+                    deleted.append(name)
+            db.save()
+            if deleted:
+                names = "، ".join(deleted)
+                line_bot_api.reply_message(event.reply_token, 
+                    TextSendMessage(text=f"✅ تم حذف الأدمن:\n{names}"))
+            else:
+                line_bot_api.reply_message(event.reply_token, 
+                    TextSendMessage(text="❌ المستخدمون المحددون ليسوا أدمن"))
         else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="📝 استخدم: deladmin USER_ID"))
+            parts = text.split()
+            if len(parts) == 2 and parts[1].startswith('U'):
+                admin_id = parts[1]
+                if admin_id in db.admins:
+                    del db.admins[admin_id]
+                    db.save()
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ تم حذف الأدمن"))
+            else:
+                line_bot_api.reply_message(event.reply_token, 
+                    TextSendMessage(text="📝 اكتب الأمر ثم اعمل منشن:\ndeladmin @الشخص"))
     
     elif cmd.startswith('addowner') and is_owner(user_id):
-        parts = text.split()
-        if len(parts) == 2:
-            new_owner = parts[1]
-            db.owners[new_owner] = True
+        mentioned = get_mentioned_user_ids(event)
+        if mentioned:
+            added = []
+            for new_owner in mentioned:
+                db.owners[new_owner] = True
+                name = get_user_display_name(new_owner)
+                added.append(name)
             db.save()
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ تمت إضافة مالك"))
+            names = "، ".join(added)
+            line_bot_api.reply_message(event.reply_token, 
+                TextSendMessage(text=f"✅ تمت إضافة مالك:\n{names}"))
         else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="📝 استخدم: addowner USER_ID"))
+            parts = text.split()
+            if len(parts) == 2 and parts[1].startswith('U'):
+                new_owner = parts[1]
+                db.owners[new_owner] = True
+                db.save()
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ تمت إضافة مالك جديد"))
+            else:
+                line_bot_api.reply_message(event.reply_token, 
+                    TextSendMessage(text="📝 اكتب الأمر ثم اعمل منشن:\naddowner @الشخص"))
+    
+    elif cmd.startswith('delowner') and is_owner(user_id):
+        mentioned = get_mentioned_user_ids(event)
+        if mentioned:
+            deleted = []
+            errors = []
+            for owner_id in mentioned:
+                if owner_id == user_id:
+                    errors.append("❌ لا يمكنك حذف نفسك")
+                elif owner_id == INITIAL_OWNER_ID:
+                    errors.append("❌ لا يمكن حذف المالك الأساسي")
+                elif owner_id in db.owners:
+                    del db.owners[owner_id]
+                    name = get_user_display_name(owner_id)
+                    deleted.append(name)
+            db.save()
+            msg = ""
+            if deleted:
+                names = "، ".join(deleted)
+                msg += f"✅ تم حذف المالك:\n{names}\n"
+            if errors:
+                msg += "\n".join(errors)
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg.strip()))
+        else:
+            parts = text.split()
+            if len(parts) == 2 and parts[1].startswith('U'):
+                owner_id = parts[1]
+                if owner_id == user_id:
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ لا يمكنك حذف نفسك!"))
+                elif owner_id == INITIAL_OWNER_ID:
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ لا يمكن حذف المالك الأساسي!"))
+                elif owner_id in db.owners:
+                    del db.owners[owner_id]
+                    db.save()
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ تم حذف المالك"))
+                else:
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ المعرف غير موجود في قائمة المالكين"))
+            else:
+                line_bot_api.reply_message(event.reply_token, 
+                    TextSendMessage(text="📝 اكتب الأمر ثم اعمل منشن:\ndelowner @الشخص"))
+    
+    elif cmd.startswith('ban') and is_owner(user_id):
+        mentioned = get_mentioned_user_ids(event)
+        if mentioned:
+            banned = []
+            errors = []
+            for ban_user in mentioned:
+                if ban_user in db.owners:
+                    errors.append(f"❌ لا يمكن حظر مالك")
+                elif ban_user in db.admins:
+                    errors.append(f"❌ لا يمكن حظر أدمن")
+                else:
+                    db.banned[ban_user] = True
+                    name = get_user_display_name(ban_user)
+                    banned.append(name)
+            db.save()
+            msg = ""
+            if banned:
+                names = "، ".join(banned)
+                msg += f"✅ تم حظر:\n{names}\n"
+            if errors:
+                msg += "\n".join(errors)
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg.strip()))
+        else:
+            parts = text.split()
+            if len(parts) == 2 and parts[1].startswith('U'):
+                ban_user = parts[1]
+                if ban_user in db.owners:
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ لا يمكن حظر مالك!"))
+                elif ban_user in db.admins:
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ لا يمكن حظر أدمن!"))
+                else:
+                    db.banned[ban_user] = True
+                    db.save()
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ تم حظر المستخدم"))
+            else:
+                line_bot_api.reply_message(event.reply_token, 
+                    TextSendMessage(text="📝 اكتب الأمر ثم اعمل منشن:\nban @الشخص"))
+    
+    elif cmd.startswith('unban') and is_owner(user_id):
+        mentioned = get_mentioned_user_ids(event)
+        if mentioned:
+            unbanned = []
+            for unban_user in mentioned:
+                if unban_user in db.banned:
+                    del db.banned[unban_user]
+                    name = get_user_display_name(unban_user)
+                    unbanned.append(name)
+            db.save()
+            if unbanned:
+                names = "، ".join(unbanned)
+                line_bot_api.reply_message(event.reply_token, 
+                    TextSendMessage(text=f"✅ تم إلغاء حظر:\n{names}"))
+            else:
+                line_bot_api.reply_message(event.reply_token, 
+                    TextSendMessage(text="❌ المستخدمون المحددون غير محظورين"))
+        else:
+            parts = text.split()
+            if len(parts) == 2 and parts[1].startswith('U'):
+                unban_user = parts[1]
+                if unban_user in db.banned:
+                    del db.banned[unban_user]
+                    db.save()
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ تم إلغاء حظر المستخدم"))
+                else:
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ المستخدم غير محظور"))
+            else:
+                line_bot_api.reply_message(event.reply_token, 
+                    TextSendMessage(text="📝 اكتب الأمر ثم اعمل منشن:\nunban @الشخص"))
     
     elif cmd == 'banlist' and is_owner(user_id):
         if not db.banned:
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="❌ قائمة المحظورين فارغة"))
         else:
             ban_text = f"╔════════════════════\n║ 🚫 المحظورين ({len(db.banned)})\n║\n"
-            for i, ban_id in enumerate(list(db.banned.keys())[:15], 1):
-                ban_text += f"║ {i}. {ban_id[:15]}...\n"
+            for i, ban_id in enumerate(list(db.banned.keys())[:20], 1):
+                name = get_user_display_name(ban_id)
+                ban_text += f"║ {i}. {name}\n"
+            if len(db.banned) > 20:
+                ban_text += f"║ ... و{len(db.banned) - 20} آخرين\n"
             ban_text += "╚════════════════════"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=ban_text))
     
