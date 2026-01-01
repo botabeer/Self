@@ -1,10 +1,14 @@
 services:
   - type: worker
-    name: bot-abeer
+    name: line-bot-abeer
     env: python
+    region: oregon
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python app.py
     autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
-        value: 3.9.18
+        value: 3.13.4
+      - key: PYTHONUNBUFFERED
+        value: 1
