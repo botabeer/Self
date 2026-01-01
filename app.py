@@ -21,7 +21,10 @@ class ProtectionBot:
         
         # تسجيل الدخول
         try:
-            token = os.getenv('LINE_TOKEN', '')
+            # دعم أسماء متعددة للتوكن
+            token = (os.getenv('LINE_TOKEN', '') or 
+                    os.getenv('LINE_CHANNEL_ACCESS_TOKEN', '') or
+                    os.getenv('CHANNEL_ACCESS_TOKEN', ''))
             email = os.getenv('LINE_EMAIL', '')
             password = os.getenv('LINE_PASSWORD', '')
             
@@ -33,7 +36,10 @@ class ProtectionBot:
                 self.client = LINE(email, password)
             else:
                 print("❌ لم يتم تعيين بيانات تسجيل الدخول!")
-                print("   أضف: LINE_TOKEN أو (LINE_EMAIL + LINE_PASSWORD)")
+                print("   أضف واحد من:")
+                print("   - LINE_TOKEN")
+                print("   - LINE_CHANNEL_ACCESS_TOKEN")
+                print("   - LINE_EMAIL + LINE_PASSWORD")
                 sys.exit(1)
             
             self.poll = OEPoll(self.client)
