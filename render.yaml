@@ -2,10 +2,9 @@ services:
   - type: web
     name: line-protection-bot
     env: python
-    region: oregon
-    plan: free
+    runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
     envVars:
       - key: LINE_CHANNEL_ACCESS_TOKEN
         sync: false
