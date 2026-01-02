@@ -1,44 +1,14 @@
-# =========================
-# requirements.txt للبوت LINE v3
-# متوافقة مع Python 3.13 على Render
-# =========================
-
-# إطار العمل الرئيسي للبوت
 Flask==3.0.0
-Werkzeug==3.0.1
-
-# للتعامل مع HTTP وطلبات API
+gunicorn==21.2.0
 requests==2.31.0
-
-# لإدارة المتغيرات البيئية من .env
 python-dotenv==1.0.0
-
-# مكتبة LINE - مهمة جداً!
-git+https://github.com/dyseo/linepy.git
-
-# مكتبات مساعدة للتعامل مع الصور (متوافقة مع Python 3.13)
-Pillow==10.2.0
-
-# التعامل مع ملفات YAML (إعدادات البوت)
-PyYAML==6.0.1
-
-# مكتبات إضافية
 rsa==4.9
+thrift==0.16.0
+Pillow==10.2.0
+PyYAML==6.0.1
 humanfriendly==10.0
 beautifulsoup4==4.12.3
-lxml==5.1.0
 pytz==2024.1
 
-# للـ Production Server
-gunicorn==21.2.0
-
-# -------------------------
-# ملاحظات:
-# 1. تأكد من إضافة Environment Variables في Render:
-#    - LINE_EMAIL
-#    - LINE_PASSWORD
-#    أو LINE_AUTH_TOKEN
-# 
-# 2. Build Command: pip install -r requirements.txt
-# 3. Start Command: python app.py
-# -------------------------
+# LinePy من archive مباشر
+https://github.com/dyseo/linepy/archive/refs/heads/master.zip
