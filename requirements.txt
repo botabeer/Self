@@ -1,14 +1,10 @@
+# ========== LINE Bot SDK v3 (الرسمي) ==========
+line-bot-sdk==3.8.0
+
+# ========== Flask للـ Web Server ==========
 Flask==3.0.0
 gunicorn==21.2.0
+
+# ========== مكتبات مساعدة ==========
 requests==2.31.0
 python-dotenv==1.0.0
-rsa==4.9
-thrift==0.16.0
-Pillow==10.2.0
-PyYAML==6.0.1
-humanfriendly==10.0
-beautifulsoup4==4.12.3
-pytz==2024.1
-
-# LinePy من archive مباشر
-https://github.com/dyseo/linepy/archive/refs/heads/master.zip
