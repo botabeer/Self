@@ -3,7 +3,7 @@
 """
 🛡️ LINE Protection Bot - Official API
 ✅ يشتغل 100% على Render المجاني
-✅ بدون linepy - يستخدم LINE Official API
+✅ مع نظام إضافة Owner تلقائي
 """
 
 import os
@@ -34,6 +34,9 @@ app = Flask(__name__)
 # ========== إعدادات LINE Bot ==========
 CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', '')
 CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET', '')
+
+# 🔑 كود التفعيل السري - غيره بعد ما تضيف نفسك!
+ACTIVATION_CODE = os.getenv('ACTIVATION_CODE', 'OWNER2026')
 
 if not CHANNEL_ACCESS_TOKEN or not CHANNEL_SECRET:
     print("❌ خطأ: أضف LINE_CHANNEL_ACCESS_TOKEN و LINE_CHANNEL_SECRET")
@@ -67,7 +70,6 @@ class BotDatabase:
             try:
                 with open(self.data_file, 'r', encoding='utf-8') as f:
                     loaded = json.load(f)
-                    # دمج مع القيم الافتراضية
                     for key in default_data:
                         if key not in loaded:
                             loaded[key] = default_data[key]
@@ -96,16 +98,43 @@ class BotDatabase:
     def is_banned(self, user_id):
         return user_id in self.data['banned']
     
-    def add_owner(self, user_id, name=""):
-        self.data['owners'][user_id] = {'name': name, 'added': time.time()}
+    def add_owner(self, user_id, name="Unknown"):
+        self.data['owners'][user_id] = {
+            'name': name,
+            'added': time.time(),
+            'added_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        self.save_data()
+        print(f"✅ Owner added: {user_id} ({name})")
+    
+    def remove_owner(self, user_id):
+        if user_id in self.data['owners']:
+            del self.data['owners'][user_id]
+            self.save_data()
+            return True
+        return False
+    
+    def add_admin(self, user_id, name="Unknown"):
+        self.data['admins'][user_id] = {
+            'name': name,
+            'added': time.time(),
+            'added_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
         self.save_data()
     
-    def add_admin(self, user_id, name=""):
-        self.data['admins'][user_id] = {'name': name, 'added': time.time()}
-        self.save_data()
+    def remove_admin(self, user_id):
+        if user_id in self.data['admins']:
+            del self.data['admins'][user_id]
+            self.save_data()
+            return True
+        return False
     
-    def ban_user(self, user_id, reason=""):
-        self.data['banned'][user_id] = {'reason': reason, 'banned_at': time.time()}
+    def ban_user(self, user_id, reason="No reason"):
+        self.data['banned'][user_id] = {
+            'reason': reason,
+            'banned_at': time.time(),
+            'banned_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
         self.save_data()
     
     def unban_user(self, user_id):
@@ -135,25 +164,44 @@ def get_commands_text():
 ║ • help - قائمة الأوامر
 ║ • status - حالة البوت
 ║ • me - معلوماتي
+║ • myid - معرفي
 ║ • time - الوقت الحالي
 ║
 ║ 👑 المالك فقط:
-║ • addowner - إضافة مالك
-║ • removeowner - حذف مالك
-║ • addadmin - إضافة أدمن
-║ • removeadmin - حذف أدمن
-║ • ban - حظر مستخدم
-║ • unban - إلغاء الحظر
+║ • addadmin @mention
+║ • removeadmin @mention
+║ • ban @mention
+║ • unban @mention
 ║ • owners - قائمة المالكين
 ║ • admins - قائمة الأدمنز
 ║ • banned - قائمة المحظورين
-║ • restart - إعادة التشغيل
+║ • addowner [user_id]
+║ • removeowner [user_id]
 ║
 ║ 🔧 إعدادات:
 ║ • protect on/off
 ║ • welcome on/off
 ║
+║ 🔐 التفعيل الأول:
+║ • activate [code]
+║
 ╚═══════════════════"""
+
+def get_user_profile(user_id):
+    """جلب معلومات المستخدم"""
+    try:
+        with ApiClient(configuration) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            profile = line_bot_api.get_profile(user_id)
+            return {
+                'display_name': profile.display_name,
+                'user_id': profile.user_id,
+                'picture_url': profile.picture_url if hasattr(profile, 'picture_url') else None,
+                'status_message': profile.status_message if hasattr(profile, 'status_message') else None
+            }
+    except Exception as e:
+        print(f"❌ Error getting profile: {e}")
+        return None
 
 # ========== Flask Routes ==========
 @app.route("/")
@@ -193,8 +241,21 @@ def home():
             margin: 20px 0;
             font-size: 1.2em;
         }}
-        .info {{ margin: 10px 0; font-size: 1.1em; }}
+        .info {{ 
+            margin: 10px 0; 
+            font-size: 1.1em;
+            padding: 10px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+        }}
         .footer {{ margin-top: 30px; opacity: 0.7; }}
+        .setup-info {{
+            background: rgba(255,200,0,0.2);
+            padding: 15px;
+            border-radius: 15px;
+            margin-top: 20px;
+            font-size: 0.9em;
+        }}
     </style>
 </head>
 <body>
@@ -205,6 +266,7 @@ def home():
         <div class="info">👑 Owners: {len(db.data['owners'])}</div>
         <div class="info">👮 Admins: {len(db.data['admins'])}</div>
         <div class="info">🚫 Banned: {len(db.data['banned'])}</div>
+        {'<div class="setup-info">⚠️ لإضافة نفسك كـ Owner:<br>أرسل للبوت: activate ' + ACTIVATION_CODE + '</div>' if len(db.data['owners']) == 0 else ''}
         <div class="footer">Made with ❤️ for LINE</div>
     </div>
 </body>
@@ -238,7 +300,8 @@ def health():
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event):
     """معالجة الرسائل النصية"""
-    text = event.message.text.strip().lower()
+    text = event.message.text.strip()
+    text_lower = text.lower()
     user_id = event.source.user_id
     
     # منع المحظورين
@@ -250,11 +313,32 @@ def handle_text_message(event):
         
         reply_text = ""
         
+        # 🔐 تفعيل Owner الأول
+        if text_lower.startswith('activate '):
+            code = text[9:].strip()
+            if code == ACTIVATION_CODE:
+                if not db.is_owner(user_id):
+                    profile = get_user_profile(user_id)
+                    name = profile['display_name'] if profile else "Unknown"
+                    db.add_owner(user_id, name)
+                    reply_text = f"""╔═══════════════════
+║ 🎉 تم التفعيل بنجاح!
+║ 👑 أنت الآن Owner
+║ 👤 {name}
+║ 🆔 {user_id}
+║
+║ 📝 استخدم 'help' للأوامر
+╚═══════════════════"""
+                else:
+                    reply_text = "✅ أنت Owner بالفعل!"
+            else:
+                reply_text = "❌ كود خاطئ!"
+        
         # الأوامر
-        if text in ['help', 'مساعدة', 'الأوامر']:
+        elif text_lower in ['help', 'مساعدة', 'الأوامر']:
             reply_text = get_commands_text()
         
-        elif text in ['status', 'الحالة']:
+        elif text_lower in ['status', 'الحالة']:
             reply_text = f"""╔═══════════════════
 ║ 📊 حالة البوت
 ║ ⏰ {get_uptime()}
@@ -262,75 +346,133 @@ def handle_text_message(event):
 ║ 👮 الأدمنز: {len(db.data['admins'])}
 ║ 🚫 المحظورين: {len(db.data['banned'])}
 ║ 🛡️ الحماية: {'مفعلة ✅' if db.data['settings']['protect'] else 'معطلة ❌'}
+║ 👋 الترحيب: {'مفعل ✅' if db.data['settings']['welcome'] else 'معطل ❌'}
 ╚═══════════════════"""
         
-        elif text == 'me':
+        elif text_lower in ['me', 'معلوماتي']:
+            profile = get_user_profile(user_id)
             role = '👑 Owner' if db.is_owner(user_id) else '👮 Admin' if db.is_admin(user_id) else '👤 Member'
             reply_text = f"""╔═══════════════════
 ║ 📱 معلوماتك
+║ 👤 {profile['display_name'] if profile else 'Unknown'}
 ║ 🆔 {user_id}
 ║ 🏆 الرتبة: {role}
 ╚═══════════════════"""
         
-        elif text == 'time':
+        elif text_lower in ['myid', 'معرفي']:
+            reply_text = f"🆔 معرفك:\n{user_id}"
+        
+        elif text_lower in ['time', 'الوقت']:
             now = datetime.now()
             reply_text = f"🕐 الوقت: {now.strftime('%Y-%m-%d %H:%M:%S')}"
         
-        elif text == 'owners' and db.is_owner(user_id):
+        elif text_lower == 'owners' and db.is_admin(user_id):
             if db.data['owners']:
                 reply_text = "╔═══ 👑 المالكين ═══\n"
-                for i, uid in enumerate(db.data['owners'], 1):
-                    reply_text += f"║ {i}. {uid}\n"
+                for i, (uid, data) in enumerate(db.data['owners'].items(), 1):
+                    reply_text += f"║ {i}. {data.get('name', 'Unknown')}\n"
+                    reply_text += f"║    🆔 {uid}\n"
                 reply_text += "╚═══════════════════"
             else:
                 reply_text = "❌ لا يوجد مالكين"
         
-        elif text == 'admins' and db.is_admin(user_id):
+        elif text_lower == 'admins' and db.is_admin(user_id):
             if db.data['admins']:
                 reply_text = "╔═══ 👮 الأدمنز ═══\n"
-                for i, uid in enumerate(db.data['admins'], 1):
-                    reply_text += f"║ {i}. {uid}\n"
+                for i, (uid, data) in enumerate(db.data['admins'].items(), 1):
+                    reply_text += f"║ {i}. {data.get('name', 'Unknown')}\n"
+                    reply_text += f"║    🆔 {uid}\n"
                 reply_text += "╚═══════════════════"
             else:
                 reply_text = "❌ لا يوجد أدمنز"
         
-        elif text == 'banned' and db.is_admin(user_id):
+        elif text_lower == 'banned' and db.is_admin(user_id):
             if db.data['banned']:
                 reply_text = "╔═══ 🚫 المحظورين ═══\n"
-                for i, uid in enumerate(db.data['banned'], 1):
+                for i, (uid, data) in enumerate(db.data['banned'].items(), 1):
                     reply_text += f"║ {i}. {uid}\n"
+                    reply_text += f"║    📝 {data.get('reason', 'No reason')}\n"
                 reply_text += "╚═══════════════════"
             else:
                 reply_text = "✅ لا يوجد محظورين"
         
-        elif text == 'protect on' and db.is_owner(user_id):
+        elif text_lower == 'protect on' and db.is_owner(user_id):
             db.data['settings']['protect'] = True
             db.save_data()
             reply_text = "✅ تم تفعيل الحماية"
         
-        elif text == 'protect off' and db.is_owner(user_id):
+        elif text_lower == 'protect off' and db.is_owner(user_id):
             db.data['settings']['protect'] = False
             db.save_data()
             reply_text = "❌ تم إيقاف الحماية"
         
-        elif text == 'welcome on' and db.is_admin(user_id):
+        elif text_lower == 'welcome on' and db.is_admin(user_id):
             db.data['settings']['welcome'] = True
             db.save_data()
             reply_text = "✅ تم تفعيل الترحيب"
         
-        elif text == 'welcome off' and db.is_admin(user_id):
+        elif text_lower == 'welcome off' and db.is_admin(user_id):
             db.data['settings']['welcome'] = False
             db.save_data()
             reply_text = "❌ تم إيقاف الترحيب"
         
-        elif text.startswith('addowner') and db.is_owner(user_id):
-            reply_text = "📝 للإضافة، استخدم: addowner [user_id]"
+        elif text_lower.startswith('addowner ') and db.is_owner(user_id):
+            target_id = text[9:].strip()
+            if target_id and not db.is_owner(target_id):
+                profile = get_user_profile(target_id)
+                name = profile['display_name'] if profile else "Unknown"
+                db.add_owner(target_id, name)
+                reply_text = f"✅ تمت إضافة {name} كـ Owner"
+            else:
+                reply_text = "❌ معرف خاطئ أو موجود مسبقاً"
         
-        elif text.startswith('addadmin') and db.is_owner(user_id):
-            reply_text = "📝 للإضافة، استخدم: addadmin [user_id]"
+        elif text_lower.startswith('removeowner ') and db.is_owner(user_id):
+            target_id = text[12:].strip()
+            if db.remove_owner(target_id):
+                reply_text = "✅ تم حذف Owner"
+            else:
+                reply_text = "❌ غير موجود"
+        
+        elif text_lower.startswith('addadmin ') and db.is_owner(user_id):
+            target_id = text[9:].strip()
+            if target_id and not db.is_admin(target_id):
+                profile = get_user_profile(target_id)
+                name = profile['display_name'] if profile else "Unknown"
+                db.add_admin(target_id, name)
+                reply_text = f"✅ تمت إضافة {name} كـ Admin"
+            else:
+                reply_text = "❌ معرف خاطئ أو موجود مسبقاً"
+        
+        elif text_lower.startswith('removeadmin ') and db.is_owner(user_id):
+            target_id = text[12:].strip()
+            if db.remove_admin(target_id):
+                reply_text = "✅ تم حذف Admin"
+            else:
+                reply_text = "❌ غير موجود"
+        
+        elif text_lower.startswith('ban ') and db.is_owner(user_id):
+            parts = text[4:].split(' ', 1)
+            target_id = parts[0].strip()
+            reason = parts[1] if len(parts) > 1 else "No reason"
+            if target_id and not db.is_owner(target_id):
+                db.ban_user(target_id, reason)
+                reply_text = f"✅ تم حظر المستخدم"
+            else:
+                reply_text = "❌ لا يمكن حظر Owner"
+        
+        elif text_lower.startswith('unban ') and db.is_owner(user_id):
+            target_id = text[6:].strip()
+            if db.unban_user(target_id):
+                reply_text = "✅ تم إلغاء الحظر"
+            else:
+                reply_text = "❌ غير محظور"
         
         else:
-            reply_text = "❓ أمر غير معروف\nاستخدم 'help' لعرض الأوامر"
+            # رد تلقائي إذا لم يكن أمراً معروفاً
+            if not db.data['owners']:
+                reply_text = f"🔐 للتفعيل الأول:\nactivate {ACTIVATION_CODE}\n\n📝 بعدها استخدم: help"
+            else:
+                reply_text = "❓ أمر غير معروف\n📝 استخدم: help"
         
         # إرسال الرد
         if reply_text:
@@ -349,7 +491,8 @@ def handle_join(event):
         
         welcome = """🛡️ مرحباً! أنا بوت الحماية
 ✅ تم تفعيلي بنجاح
-📝 استخدم 'help' للأوامر"""
+📝 استخدم 'help' للأوامر
+👑 المالكين فقط يمكنهم التحكم"""
         
         line_bot_api.reply_message_with_http_info(
             ReplyMessageRequest(
@@ -381,6 +524,8 @@ if __name__ == "__main__":
     print("="*60)
     print(f"✅ Owners: {len(db.data['owners'])}")
     print(f"✅ Admins: {len(db.data['admins'])}")
+    if len(db.data['owners']) == 0:
+        print(f"⚠️  First setup: Send 'activate {ACTIVATION_CODE}' to bot")
     print(f"✅ Settings loaded successfully")
     print("="*60)
     
