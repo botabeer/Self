@@ -1,6 +1,31 @@
+# =========================
+# requirements.txt للبوت LINE v3
+# متوافقة مع Python 3.13 على Render
+# =========================
+
+# إطار العمل الرئيسي للبوت
 Flask==2.3.3
+
+# للتعامل مع HTTP وطلبات API
 requests==2.31.0
+
+# لإدارة المتغيرات البيئية من .env
 python-dotenv==1.0.0
+
+# مكتبة LinePy المحلية: انسخ مجلد linepy/ داخل مشروعك
+# (احذف أي git+https://... من requirements.txt)
+# from linepy import *
+
+# مكتبات مساعدة للتعامل مع الصور
 Pillow==9.5.0
+
+# التعامل مع ملفات YAML (إعدادات البوت)
 PyYAML==6.1.1
+
+# مكتبات حسابية أو إضافية حسب احتياجك
 numpy==1.27.0
+
+# -------------------------
+# Build Command على Render:
+# pip install -r requirements.txt
+# -------------------------
