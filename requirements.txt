@@ -1,10 +1,10 @@
-# ========== LINE Bot SDK v3 (الرسمي) ==========
-line-bot-sdk==3.8.0
-
-# ========== Flask للـ Web Server ==========
-Flask==3.0.0
-gunicorn==21.2.0
+# ========== LINE Self-Bot Library ==========
+# تثبيت من GitHub مباشرة
+git+https://github.com/dyseo/linepy.git
 
 # ========== مكتبات مساعدة ==========
 requests==2.31.0
 python-dotenv==1.0.0
+
+# ملاحظة: هذا البوت لا يحتاج Flask أو gunicorn
+# لأنه self-bot وليس webhook bot
