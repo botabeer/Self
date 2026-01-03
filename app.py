@@ -70,6 +70,41 @@ class BotConfig:
                 json.dump(self.data, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
+        print(f"❌ خطأ في معالجة الرسالة: {e}")
+
+# ========== Main Loop ==========
+print("\n🚀 البوت يعمل الآن...")
+print("💡 اضغط Ctrl+C للإيقاف")
+print("="*60 + "\n")
+
+last_save = time.time()
+
+try:
+    while True:
+        try:
+            ops = oepoll.fetchOperations()
+            
+            for op in ops:
+                handle_operation(op)
+            
+            # حفظ تلقائي كل 5 دقائق
+            if time.time() - last_save > 300:
+                config.save()
+                last_save = time.time()
+                print("💾 تم الحفظ التلقائي")
+            
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            print(f"❌ خطأ في الحلقة الرئيسية: {e}")
+            time.sleep(3)
+
+except KeyboardInterrupt:
+    print("\n\n⏹️ إيقاف البوت...")
+    config.save()
+    print("💾 تم حفظ الإعدادات")
+    print("👋 وداعاً!")
+    sys.exit(0):
             print(f"❌ خطأ في الحفظ: {e}")
             return False
     
@@ -662,14 +697,4 @@ def handle_message(msg):
             config.save()
             client.sendMessage(to, "❌ الانضمام التلقائي معطل")
         
-    except Exception as e:
-        print(f"❌ خطأ في معالجة الرسالة: {e}")
-
-# ========== Main Loop ==========
-print("\n🚀 البوت يعمل الآن...")
-print("💡 اضغط Ctrl+C للإيقاف")
-print("="*60 + "\n")
-
-last_save = time.time()
-
-try:
+    except Exception as e
