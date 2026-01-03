@@ -1,10 +1,5 @@
-# ========== LINE Self-Bot Library ==========
-# تثبيت من GitHub مباشرة
+# مكتبة LINE غير الرسمية
 git+https://github.com/dyseo/linepy.git
 
-# ========== مكتبات مساعدة ==========
-requests==2.31.0
-python-dotenv==1.0.0
-
-# ملاحظة: هذا البوت لا يحتاج Flask أو gunicorn
-# لأنه self-bot وليس webhook bot
+# مكتبات مساعدة
+requests>=2.31.0
