@@ -1,58 +1,58 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🛡️ LINE Protection Self-Bot
-⚠️ استخدم حساب ثانوي فقط!
-✅ حماية كاملة + إدارة مجموعات
+🛡️ بوت حماية LINE - نسخة عربية
+⚠️ استخدم حساب ثانوي فقط
+📝 Self-Bot للحماية والإدارة
 """
 
 import json
 import time
 import os
-import sys
 from datetime import datetime
 
 # ========== فحص المكتبات ==========
+print("🔍 جاري فحص المكتبات...")
 try:
     from linepy import LINE, OEPoll
     print("✅ linepy جاهز")
 except ImportError:
-    print("❌ linepy غير مثبت!")
-    print("📥 قم بتشغيل: pip install git+https://github.com/dyseo/linepy.git")
+    print("\n❌ خطأ: مكتبة linepy غير مثبتة!\n")
+    print("📥 قم بتشغيل الأمر التالي:")
+    print("   pip install git+https://github.com/dyseo/linepy.git\n")
     input("اضغط Enter للخروج...")
-    sys.exit(1)
+    exit(1)
 
-# ========== إعدادات البوت ==========
-class BotConfig:
+# ========== البيانات ==========
+class Database:
     def __init__(self):
-        self.config_file = 'bot_config.json'
-        self.token_file = 'line_token.txt'
-        self.load_config()
+        self.file = 'bot_data.json'
+        self.load()
     
-    def load_config(self):
-        """تحميل الإعدادات"""
+    def load(self):
+        """تحميل البيانات"""
         default = {
-            'owners': [],
-            'admins': [],
-            'banned': [],
+            'owners': [],      # المالكين
+            'admins': [],      # الأدمنز
+            'banned': [],      # المحظورين
             'protect': {
-                'kick': True,
-                'invite': True,
-                'qr': True,
-                'cancel': True
+                'kick': True,     # حماية الطرد
+                'invite': True,   # حماية الدعوة
+                'qr': True,       # حماية الرابط
+                'cancel': True    # حماية الإلغاء
             },
             'auto': {
-                'add': True,
-                'join': True,
-                'leave': False
-            },
-            'language': 'ar'
+                'add': True,      # قبول الإضافة تلقائياً
+                'join': True,     # الانضمام تلقائياً
+                'read': True      # قراءة الرسائل تلقائياً
+            }
         }
         
-        if os.path.exists(self.config_file):
+        if os.path.exists(self.file):
             try:
-                with open(self.config_file, 'r', encoding='utf-8') as f:
+                with open(self.file, 'r', encoding='utf-8') as f:
                     self.data = json.load(f)
+                # إضافة المفاتيح المفقودة
                 for key in default:
                     if key not in self.data:
                         self.data[key] = default[key]
@@ -64,47 +64,12 @@ class BotConfig:
         self.save()
     
     def save(self):
-        """حفظ الإعدادات"""
+        """حفظ البيانات"""
         try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
+            with open(self.file, 'w', encoding='utf-8') as f:
                 json.dump(self.data, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
-        print(f"❌ خطأ في معالجة الرسالة: {e}")
-
-# ========== Main Loop ==========
-print("\n🚀 البوت يعمل الآن...")
-print("💡 اضغط Ctrl+C للإيقاف")
-print("="*60 + "\n")
-
-last_save = time.time()
-
-try:
-    while True:
-        try:
-            ops = oepoll.fetchOperations()
-            
-            for op in ops:
-                handle_operation(op)
-            
-            # حفظ تلقائي كل 5 دقائق
-            if time.time() - last_save > 300:
-                config.save()
-                last_save = time.time()
-                print("💾 تم الحفظ التلقائي")
-            
-        except KeyboardInterrupt:
-            raise
-        except Exception as e:
-            print(f"❌ خطأ في الحلقة الرئيسية: {e}")
-            time.sleep(3)
-
-except KeyboardInterrupt:
-    print("\n\n⏹️ إيقاف البوت...")
-    config.save()
-    print("💾 تم حفظ الإعدادات")
-    print("👋 وداعاً!")
-    sys.exit(0):
             print(f"❌ خطأ في الحفظ: {e}")
             return False
     
@@ -117,199 +82,186 @@ except KeyboardInterrupt:
     def is_banned(self, mid):
         return mid in self.data['banned']
 
-config = BotConfig()
+db = Database()
 
-# ========== تسجيل الدخول ==========
-def clear_screen():
+# ========== التسجيل ==========
+def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def print_banner():
+def banner():
     print("="*60)
-    print("🛡️  LINE PROTECTION SELF-BOT")
+    print("🛡️  بوت حماية LINE - نسخة عربية")
     print("="*60)
-    print("⚠️  استخدم حساب ثانوي - ليس الرئيسي!")
+    print("⚠️  استخدم حساب ثانوي - ليس الحساب الرئيسي!")
     print("="*60)
 
 def login():
-    """تسجيل الدخول إلى LINE"""
-    clear_screen()
-    print_banner()
+    """تسجيل الدخول"""
+    clear()
+    banner()
     
-    # محاولة استخدام Token المحفوظ
-    if os.path.exists(config.token_file):
+    token_file = 'token.txt'
+    
+    # محاولة Token المحفوظ
+    if os.path.exists(token_file):
         try:
-            with open(config.token_file, 'r') as f:
+            with open(token_file, 'r') as f:
                 token = f.read().strip()
             
-            print("\n🔐 تسجيل الدخول بـ Token المحفوظ...")
+            print("\n🔐 تسجيل الدخول بـ Token...")
             client = LINE(token)
             print(f"✅ مرحباً: {client.profile.displayName}")
             return client
-        except Exception as e:
-            print(f"❌ Token منتهي: {e}")
-            os.remove(config.token_file)
+        except:
+            print("❌ Token منتهي، سجل دخول جديد")
+            os.remove(token_file)
     
-    # تسجيل دخول جديد
-    print("\n📧 تسجيل دخول جديد")
+    # تسجيل جديد
+    print("\n📧 تسجيل الدخول")
     print("-"*60)
     
     while True:
-        print("\nاختر طريقة التسجيل:")
-        print("1. Email/Password")
-        print("2. QR Code (قريباً)")
-        print("3. إلغاء")
+        email = input("\n📧 Email: ").strip()
+        password = input("🔑 Password: ").strip()
         
-        choice = input("\nاختيارك: ").strip()
+        if not email or not password:
+            print("❌ أدخل Email و Password!")
+            continue
         
-        if choice == '1':
-            email = input("\n📧 Email: ").strip()
-            password = input("🔑 Password: ").strip()
+        try:
+            print("\n⏳ جاري التسجيل...")
+            client = LINE(email, password)
             
-            if not email or not password:
-                print("❌ الرجاء إدخال Email وPassword!")
-                continue
+            # حفظ Token
+            with open(token_file, 'w') as f:
+                f.write(client.authToken)
             
-            try:
-                print("\n⏳ جاري التسجيل...")
-                client = LINE(email, password)
-                
-                # حفظ Token
-                with open(config.token_file, 'w') as f:
-                    f.write(client.authToken)
-                
-                print(f"\n✅ تم التسجيل: {client.profile.displayName}")
-                print(f"💾 Token محفوظ")
-                return client
-                
-            except Exception as e:
-                print(f"\n❌ فشل التسجيل: {e}")
-                print("\n💡 تأكد من:")
-                print("  • Email/Password صحيح")
-                print("  • التحقق بخطوتين معطّل")
-                print("  • الحساب ليس محظور")
-                
-                retry = input("\nحاول مرة أخرى؟ (y/n): ").lower()
-                if retry != 'y':
-                    sys.exit(1)
-        
-        elif choice == '3':
-            print("\n👋 إلغاء...")
-            sys.exit(0)
-        else:
-            print("❌ اختيار خاطئ!")
+            print(f"\n✅ نجح التسجيل!")
+            print(f"👤 الاسم: {client.profile.displayName}")
+            print(f"💾 Token محفوظ في: {token_file}")
+            return client
+            
+        except Exception as e:
+            print(f"\n❌ فشل: {e}")
+            print("\n💡 تأكد من:")
+            print("  • Email/Password صحيح")
+            print("  • التحقق بخطوتين معطّل")
+            
+            if input("\nحاول مرة أخرى؟ (y/n): ").lower() != 'y':
+                exit(0)
 
 # تسجيل الدخول
 client = login()
 oepoll = OEPoll(client)
-bot_mid = client.profile.mid
+my_mid = client.profile.mid
 
-# إضافة نفسك كـ Owner تلقائياً
-if bot_mid not in config.data['owners']:
-    config.data['owners'].append(bot_mid)
-    config.save()
+# إضافة نفسك كـ Owner
+if my_mid not in db.data['owners']:
+    db.data['owners'].append(my_mid)
+    db.save()
 
-clear_screen()
-print_banner()
+clear()
+banner()
 print(f"\n✅ البوت جاهز!")
-print(f"👤 الاسم: {client.profile.displayName}")
-print(f"🆔 MID: {bot_mid[:20]}...")
-print(f"👑 Owners: {len(config.data['owners'])}")
-print(f"👮 Admins: {len(config.data['admins'])}")
+print(f"👤 {client.profile.displayName}")
+print(f"🆔 {my_mid}")
+print(f"👑 Owners: {len(db.data['owners'])}")
+print(f"👮 Admins: {len(db.data['admins'])}")
+print(f"🚫 Banned: {len(db.data['banned'])}")
 print("\n" + "="*60)
 
-# ========== الأوامر ==========
-def get_help():
-    return """╔═══════════════════════
-║ 🛡️ أوامر البوت الحامي
+# ========== قائمة الأوامر ==========
+def help_msg():
+    return """╔═══════════════════════════
+║ 🛡️ أوامر البوت
 ║
-║ 📋 الأوامر العامة:
-║ ├ help - قائمة الأوامر
-║ ├ me - معلوماتي
-║ ├ speed - سرعة البوت
-║ ├ status - حالة الحماية
-║ ├ time - الوقت الحالي
-║ └ about - عن البوت
+║ 📋 عامة:
+║ ├ الأوامر - هذه القائمة
+║ ├ معلوماتي - بياناتك
+║ ├ السرعة - سرعة البوت
+║ ├ الحالة - حالة الحماية
+║ ├ الوقت - التاريخ والوقت
 ║
-║ 🛡️ الحماية (Owner):
-║ ├ protect on/off - كل الحماية
-║ ├ kick on/off - حماية الطرد
-║ ├ invite on/off - حماية الدعوة
-║ ├ qr on/off - حماية الرابط
-║ └ cancel on/off - حماية الإلغاء
+║ 🛡️ الحماية (مالك):
+║ ├ تفعيل_الحماية
+║ ├ ايقاف_الحماية
+║ ├ تفعيل_حماية_الطرد
+║ ├ ايقاف_حماية_الطرد
+║ ├ تفعيل_حماية_الدعوة
+║ ├ ايقاف_حماية_الدعوة
+║ ├ تفعيل_حماية_الرابط
+║ ├ ايقاف_حماية_الرابط
 ║
-║ 👥 الصلاحيات (Owner):
-║ ├ addadmin @mention
-║ ├ deladmin @mention
-║ ├ adminlist
-║ ├ ban @mention [reason]
-║ ├ unban @mention
-║ └ banlist
+║ 👥 المجموعة (أدمن):
+║ ├ معلومات_المجموعة
+║ ├ الاعضاء - قائمة الأعضاء
+║ ├ طرد @منشن
+║ ├ طرد_الكل (مالك فقط)
+║ ├ دعوة @منشن
+║ ├ فتح_الرابط
+║ ├ اغلاق_الرابط
+║ ├ جلب_الرابط
+║ ├ مغادرة
 ║
-║ 🔧 المجموعة (Admin):
-║ ├ ginfo - معلومات المجموعة
-║ ├ members - الأعضاء
-║ ├ kick @mention - طرد
-║ ├ kickall - طرد الجميع
-║ ├ invite @mention - دعوة
-║ ├ openqr - فتح الرابط
-║ ├ closeqr - إغلاق الرابط
-║ ├ getqr - جلب الرابط
-║ └ leave - مغادرة
+║ 👮 الصلاحيات (مالك):
+║ ├ اضافة_ادمن @منشن
+║ ├ حذف_ادمن @منشن
+║ ├ قائمة_الادمنز
+║ ├ حظر @منشن
+║ ├ الغاء_حظر @منشن
+║ ├ قائمة_المحظورين
 ║
-║ ⚙️ إعدادات (Owner):
-║ ├ autoadd on/off
-║ ├ autojoin on/off
-║ └ autoleave on/off
-║
-╚═══════════════════════"""
+╚═══════════════════════════"""
 
 # ========== معالج الأحداث ==========
-def handle_operation(op):
+def handle_op(op):
+    """معالجة الأحداث"""
     try:
         # [5] إضافة صديق
         if op.type == 5:
-            if config.data['auto']['add']:
+            if db.data['auto']['add']:
                 try:
                     contact = client.getContact(op.param1)
-                    client.sendMessage(op.param1, 
-                        f"👋 مرحباً {contact.displayName}!\n"
-                        "شكراً لإضافتك 🌟\n"
-                        "أرسل 'help' للأوامر")
-                    print(f"✅ تمت إضافة: {contact.displayName}")
-                except:
-                    pass
+                    client.sendMessage(op.param1,
+                        f"👋 أهلاً {contact.displayName}!\n"
+                        "شكراً لإضافتك 💚\n"
+                        "أرسل: الأوامر")
+                    print(f"✅ إضافة: {contact.displayName}")
+                except Exception as e:
+                    print(f"❌ خطأ إضافة: {e}")
         
-        # [13] دعوة إلى مجموعة
+        # [13] دعوة لمجموعة
         elif op.type == 13:
             inviter = op.param2
             invited = op.param3
             group_id = op.param1
             
             # حماية الدعوات
-            if config.data['protect']['invite']:
-                if not config.is_admin(inviter):
-                    print(f"⚠️ دعوة غير مصرح: {inviter}")
+            if db.data['protect']['invite']:
+                if not db.is_admin(inviter):
+                    print(f"⚠️ دعوة غير مصرح من: {inviter}")
                     try:
                         client.cancelGroupInvitation(group_id, [invited])
                         client.kickoutFromGroup(group_id, [inviter])
-                        client.sendMessage(group_id, "🚫 تم طرد عضو حاول دعوة بدون صلاحية!")
                         
-                        if inviter not in config.data['banned']:
-                            config.data['banned'].append(inviter)
-                            config.save()
+                        if inviter not in db.data['banned']:
+                            db.data['banned'].append(inviter)
+                            db.save()
+                        
+                        print(f"✅ طرد المخالف")
                     except Exception as e:
-                        print(f"❌ فشل الحماية: {e}")
+                        print(f"❌ فشل: {e}")
             
             # قبول الدعوة
-            if config.data['auto']['join']:
+            if db.data['auto']['join']:
                 try:
                     client.acceptGroupInvitation(group_id)
                     group = client.getGroup(group_id)
-                    client.sendMessage(group_id, 
-                        f"✅ انضممت للمجموعة: {group.name}\n"
+                    client.sendMessage(group_id,
+                        f"✅ انضممت: {group.name}\n"
                         "🛡️ الحماية مفعّلة\n"
-                        "📝 أرسل 'help' للأوامر")
-                    print(f"✅ انضممت: {group.name}")
+                        "📝 أرسل: الأوامر")
+                    print(f"✅ انضمام: {group.name}")
                 except:
                     pass
         
@@ -319,117 +271,110 @@ def handle_operation(op):
             kicked = op.param3
             group_id = op.param1
             
-            if config.data['protect']['kick']:
+            if db.data['protect']['kick']:
                 # حماية البوت والأدمنز
-                if kicked == bot_mid or config.is_admin(kicked):
-                    if not config.is_admin(kicker):
-                        print(f"🚨 محاولة طرد: {kicker} طرد {kicked}")
+                if kicked == my_mid or db.is_admin(kicked):
+                    if not db.is_admin(kicker):
+                        print(f"🚨 محاولة طرد من: {kicker}")
                         try:
                             # إعادة دعوة
                             client.inviteIntoGroup(group_id, [kicked])
                             # طرد المعتدي
                             client.kickoutFromGroup(group_id, [kicker])
-                            client.sendMessage(group_id, 
+                            client.sendMessage(group_id,
                                 "🛡️ تم اكتشاف محاولة طرد!\n"
                                 "✅ تمت معالجتها")
                             
-                            if kicker not in config.data['banned']:
-                                config.data['banned'].append(kicker)
-                                config.save()
+                            if kicker not in db.data['banned']:
+                                db.data['banned'].append(kicker)
+                                db.save()
                             
-                            print(f"✅ تم طرد المعتدي: {kicker}")
+                            print(f"✅ طرد المعتدي")
                         except Exception as e:
-                            print(f"❌ فشل الحماية: {e}")
+                            print(f"❌ فشل: {e}")
         
         # [11] تغيير رابط
         elif op.type == 11:
             changer = op.param2
             group_id = op.param1
             
-            if config.data['protect']['qr']:
-                if not config.is_admin(changer):
-                    print(f"⚠️ محاولة تغيير رابط: {changer}")
+            if db.data['protect']['qr']:
+                if not db.is_admin(changer):
+                    print(f"⚠️ محاولة فتح رابط")
                     try:
                         group = client.getGroup(group_id)
                         group.preventedJoinByTicket = True
                         client.updateGroup(group)
                         client.kickoutFromGroup(group_id, [changer])
-                        client.sendMessage(group_id, 
-                            "🔒 محاولة فتح الرابط!\n"
-                            "✅ تم إغلاقه وطرد المعتدي")
-                    except Exception as e:
-                        print(f"❌ فشل الحماية: {e}")
+                    except:
+                        pass
         
         # [32] إلغاء دعوة
         elif op.type == 32:
-            if config.data['protect']['cancel']:
+            if db.data['protect']['cancel']:
                 canceller = op.param2
                 group_id = op.param1
                 
-                if not config.is_admin(canceller):
-                    print(f"⚠️ محاولة إلغاء دعوة: {canceller}")
+                if not db.is_admin(canceller):
                     try:
                         client.kickoutFromGroup(group_id, [canceller])
                     except:
                         pass
         
-        # [26] رسالة جديدة
+        # [26] رسالة
         elif op.type == 26:
             msg = op.message
             if msg.contentType == 0 and msg.text:
-                handle_message(msg)
+                handle_msg(msg)
         
-        # [17] انضمام عضو
-        elif op.type == 17:
-            if config.data['auto']['leave']:
-                try:
-                    client.leaveGroup(op.param1)
-                except:
-                    pass
-        
+        # قراءة تلقائية
+        if db.data['auto']['read'] and op.type == 26:
+            try:
+                client.sendChatChecked(op.param1, op.param2)
+            except:
+                pass
+    
     except Exception as e:
-        print(f"❌ خطأ في العملية {op.type}: {e}")
+        print(f"❌ خطأ في op {op.type}: {e}")
 
-def handle_message(msg):
-    """معالج الرسائل"""
+def handle_msg(msg):
+    """معالجة الرسائل"""
     text = msg.text.strip()
     sender = msg._from
     to = msg.to if msg.toType == 2 else sender
     is_group = msg.toType == 2
     
     # منع المحظورين
-    if config.is_banned(sender):
+    if db.is_banned(sender):
         return
-    
-    text_lower = text.lower()
     
     try:
         # ===== الأوامر العامة =====
-        if text_lower == 'help':
-            client.sendMessage(to, get_help())
+        if text == 'الأوامر':
+            client.sendMessage(to, help_msg())
         
-        elif text_lower == 'me':
+        elif text == 'معلوماتي':
             contact = client.getContact(sender)
-            role = "👑 Owner" if config.is_owner(sender) else \
-                   "👮 Admin" if config.is_admin(sender) else "👤 Member"
+            role = "👑 مالك" if db.is_owner(sender) else \
+                   "👮 أدمن" if db.is_admin(sender) else "👤 عضو"
             
-            msg_text = f"""╔═══════════════════
+            info = f"""╔═══════════════════
 ║ 📱 معلوماتك
 ║ 👤 {contact.displayName}
 ║ 🆔 {sender}
-║ 🏆 الرتبة: {role}
+║ 🏆 {role}
 ╚═══════════════════"""
-            client.sendMessage(to, msg_text)
+            client.sendMessage(to, info)
         
-        elif text_lower == 'speed':
+        elif text == 'السرعة':
             start = time.time()
             client.sendMessage(to, "⏱️ جاري القياس...")
             elapsed = time.time() - start
-            client.sendMessage(to, f"⚡ السرعة: {elapsed:.3f} ثانية")
+            client.sendMessage(to, f"⚡ السرعة: {elapsed:.2f}s")
         
-        elif text_lower == 'status':
-            p = config.data['protect']
-            a = config.data['auto']
+        elif text == 'الحالة':
+            p = db.data['protect']
+            a = db.data['auto']
             
             status = f"""╔═══════════════════
 ║ 📊 حالة البوت
@@ -443,128 +388,124 @@ def handle_message(msg):
 ║ ⚙️ التلقائي:
 ║ ├ الإضافة: {'✅' if a['add'] else '❌'}
 ║ ├ الانضمام: {'✅' if a['join'] else '❌'}
-║ └ المغادرة: {'✅' if a['leave'] else '❌'}
+║ └ القراءة: {'✅' if a['read'] else '❌'}
 ║
 ║ 👥 الإحصائيات:
-║ ├ 👑 Owners: {len(config.data['owners'])}
-║ ├ 👮 Admins: {len(config.data['admins'])}
-║ └ 🚫 Banned: {len(config.data['banned'])}
+║ ├ 👑 Owners: {len(db.data['owners'])}
+║ ├ 👮 Admins: {len(db.data['admins'])}
+║ └ 🚫 Banned: {len(db.data['banned'])}
 ╚═══════════════════"""
             client.sendMessage(to, status)
         
-        elif text_lower == 'time':
+        elif text == 'الوقت':
             now = datetime.now()
-            client.sendMessage(to, f"🕐 الوقت:\n{now.strftime('%Y-%m-%d %H:%M:%S')}")
-        
-        elif text_lower == 'about':
             client.sendMessage(to, 
-                "╔═══════════════════\n"
-                "║ 🛡️ LINE Protection Bot\n"
-                "║ 📌 Self-Bot Version\n"
-                "║ ✅ حماية كاملة\n"
-                "║ ⚡ سريع ومستقر\n"
-                "╚═══════════════════")
+                f"🕐 التاريخ والوقت:\n"
+                f"{now.strftime('%Y-%m-%d')}\n"
+                f"{now.strftime('%H:%M:%S')}")
         
-        # ===== التحكم في الحماية =====
-        elif text_lower == 'protect on' and config.is_owner(sender):
-            for key in config.data['protect']:
-                config.data['protect'][key] = True
-            config.save()
-            client.sendMessage(to, "✅ تم تفعيل جميع أنواع الحماية")
+        # ===== الحماية =====
+        elif text == 'تفعيل_الحماية' and db.is_owner(sender):
+            for key in db.data['protect']:
+                db.data['protect'][key] = True
+            db.save()
+            client.sendMessage(to, "✅ تم تفعيل كل الحماية")
         
-        elif text_lower == 'protect off' and config.is_owner(sender):
-            for key in config.data['protect']:
-                config.data['protect'][key] = False
-            config.save()
-            client.sendMessage(to, "❌ تم إيقاف جميع أنواع الحماية")
+        elif text == 'ايقاف_الحماية' and db.is_owner(sender):
+            for key in db.data['protect']:
+                db.data['protect'][key] = False
+            db.save()
+            client.sendMessage(to, "❌ تم إيقاف كل الحماية")
         
-        elif text_lower == 'kick on' and config.is_owner(sender):
-            config.data['protect']['kick'] = True
-            config.save()
+        elif text == 'تفعيل_حماية_الطرد' and db.is_owner(sender):
+            db.data['protect']['kick'] = True
+            db.save()
             client.sendMessage(to, "✅ حماية الطرد مفعلة")
         
-        elif text_lower == 'kick off' and config.is_owner(sender):
-            config.data['protect']['kick'] = False
-            config.save()
+        elif text == 'ايقاف_حماية_الطرد' and db.is_owner(sender):
+            db.data['protect']['kick'] = False
+            db.save()
             client.sendMessage(to, "❌ حماية الطرد معطلة")
         
-        elif text_lower == 'invite on' and config.is_owner(sender):
-            config.data['protect']['invite'] = True
-            config.save()
+        elif text == 'تفعيل_حماية_الدعوة' and db.is_owner(sender):
+            db.data['protect']['invite'] = True
+            db.save()
             client.sendMessage(to, "✅ حماية الدعوة مفعلة")
         
-        elif text_lower == 'invite off' and config.is_owner(sender):
-            config.data['protect']['invite'] = False
-            config.save()
+        elif text == 'ايقاف_حماية_الدعوة' and db.is_owner(sender):
+            db.data['protect']['invite'] = False
+            db.save()
             client.sendMessage(to, "❌ حماية الدعوة معطلة")
         
-        elif text_lower == 'qr on' and config.is_owner(sender):
-            config.data['protect']['qr'] = True
-            config.save()
+        elif text == 'تفعيل_حماية_الرابط' and db.is_owner(sender):
+            db.data['protect']['qr'] = True
+            db.save()
             client.sendMessage(to, "✅ حماية الرابط مفعلة")
         
-        elif text_lower == 'qr off' and config.is_owner(sender):
-            config.data['protect']['qr'] = False
-            config.save()
+        elif text == 'ايقاف_حماية_الرابط' and db.is_owner(sender):
+            db.data['protect']['qr'] = False
+            db.save()
             client.sendMessage(to, "❌ حماية الرابط معطلة")
         
-        # ===== معلومات المجموعة =====
-        elif text_lower == 'ginfo' and is_group:
+        # ===== المجموعة =====
+        elif text == 'معلومات_المجموعة' and is_group:
             group = client.getGroup(to)
             creator = group.creator.displayName if group.creator else "غير معروف"
-            qr_status = "مغلق 🔒" if group.preventedJoinByTicket else "مفتوح 🔓"
+            qr = "مفتوح 🔓" if not group.preventedJoinByTicket else "مغلق 🔒"
             
             info = f"""╔═══════════════════
 ║ 📊 معلومات المجموعة
 ║
-║ 📝 الاسم: {group.name}
-║ 🆔 المعرف: {group.id}
+║ 📝 {group.name}
 ║ 👤 المنشئ: {creator}
 ║ 👥 الأعضاء: {len(group.members)}
-║ 🔗 الرابط: {qr_status}
+║ 🔗 الرابط: {qr}
 ╚═══════════════════"""
             client.sendMessage(to, info)
         
-        elif text_lower == 'members' and is_group:
+        elif text == 'الاعضاء' and is_group:
             group = client.getGroup(to)
-            members_text = "╔═══ 👥 الأعضاء ═══\n"
+            msg_text = "╔═══ 👥 الأعضاء ═══\n"
             
-            for i, member in enumerate(group.members[:30], 1):
-                members_text += f"║ {i}. {member.displayName}\n"
+            for i, m in enumerate(group.members[:30], 1):
+                msg_text += f"║ {i}. {m.displayName}\n"
             
             if len(group.members) > 30:
-                members_text += f"║ ... و {len(group.members) - 30} آخرين\n"
+                msg_text += f"║ و {len(group.members) - 30} آخرين\n"
             
-            members_text += f"╚═══ Total: {len(group.members)} ═══"
-            client.sendMessage(to, members_text)
+            msg_text += f"╚═══ المجموع: {len(group.members)} ═══"
+            client.sendMessage(to, msg_text)
         
-        # ===== إدارة الأعضاء =====
-        elif text_lower.startswith('kick ') and config.is_admin(sender) and is_group:
+        elif text.startswith('طرد ') and db.is_admin(sender) and is_group:
             if 'MENTION' in msg.contentMetadata:
                 import ast
                 mentions = ast.literal_eval(msg.contentMetadata['MENTION'])
-                kicked_count = 0
+                kicked = 0
                 
-                for mention in mentions['MENTIONEES']:
-                    target = mention['M']
-                    if not config.is_admin(target):
+                for m in mentions['MENTIONEES']:
+                    target = m['M']
+                    if not db.is_admin(target):
                         try:
                             client.kickoutFromGroup(to, [target])
-                            kicked_count += 1
+                            kicked += 1
                         except:
                             pass
                 
-                if kicked_count > 0:
-                    client.sendMessage(to, f"✅ تم طرد {kicked_count} عضو")
+                if kicked > 0:
+                    client.sendMessage(to, f"✅ تم طرد {kicked} عضو")
+            else:
+                client.sendMessage(to, "❌ منشن العضو!")
         
-        elif text_lower == 'kickall' and config.is_owner(sender) and is_group:
+        elif text == 'طرد_الكل' and db.is_owner(sender) and is_group:
             group = client.getGroup(to)
             kicked = 0
             
-            for member in group.members:
-                if not config.is_admin(member.mid) and member.mid != bot_mid:
+            client.sendMessage(to, "⏳ جاري طرد الجميع...")
+            
+            for m in group.members:
+                if not db.is_admin(m.mid) and m.mid != my_mid:
                     try:
-                        client.kickoutFromGroup(to, [member.mid])
+                        client.kickoutFromGroup(to, [m.mid])
                         kicked += 1
                         time.sleep(0.5)
                     except:
@@ -572,129 +513,152 @@ def handle_message(msg):
             
             client.sendMessage(to, f"✅ تم طرد {kicked} عضو")
         
-        # ===== إدارة الصلاحيات =====
-        elif text_lower.startswith('addadmin') and config.is_owner(sender):
+        # ===== الصلاحيات =====
+        elif text.startswith('اضافة_ادمن') and db.is_owner(sender):
             if 'MENTION' in msg.contentMetadata:
                 import ast
                 mentions = ast.literal_eval(msg.contentMetadata['MENTION'])
                 
-                for mention in mentions['MENTIONEES']:
-                    target = mention['M']
-                    if target not in config.data['admins']:
-                        config.data['admins'].append(target)
+                for m in mentions['MENTIONEES']:
+                    target = m['M']
+                    if target not in db.data['admins']:
+                        db.data['admins'].append(target)
                 
-                config.save()
-                client.sendMessage(to, "✅ تمت إضافة Admin")
+                db.save()
+                client.sendMessage(to, "✅ تمت الإضافة")
+            else:
+                client.sendMessage(to, "❌ منشن العضو!")
         
-        elif text_lower.startswith('deladmin') and config.is_owner(sender):
+        elif text.startswith('حذف_ادمن') and db.is_owner(sender):
             if 'MENTION' in msg.contentMetadata:
                 import ast
                 mentions = ast.literal_eval(msg.contentMetadata['MENTION'])
                 
-                for mention in mentions['MENTIONEES']:
-                    target = mention['M']
-                    if target in config.data['admins']:
-                        config.data['admins'].remove(target)
+                for m in mentions['MENTIONEES']:
+                    target = m['M']
+                    if target in db.data['admins']:
+                        db.data['admins'].remove(target)
                 
-                config.save()
-                client.sendMessage(to, "✅ تم حذف Admin")
+                db.save()
+                client.sendMessage(to, "✅ تم الحذف")
+            else:
+                client.sendMessage(to, "❌ منشن العضو!")
         
-        elif text_lower == 'adminlist' and config.is_admin(sender):
-            if config.data['admins']:
-                admin_text = "╔═══ 👮 Admins ═══\n"
-                for i, admin_mid in enumerate(config.data['admins'], 1):
+        elif text == 'قائمة_الادمنز' and db.is_admin(sender):
+            if db.data['admins']:
+                msg_text = "╔═══ 👮 الأدمنز ═══\n"
+                for i, admin_mid in enumerate(db.data['admins'], 1):
                     try:
                         contact = client.getContact(admin_mid)
-                        admin_text += f"║ {i}. {contact.displayName}\n"
+                        msg_text += f"║ {i}. {contact.displayName}\n"
                     except:
-                        admin_text += f"║ {i}. {admin_mid[:20]}...\n"
-                admin_text += "╚═══════════════════"
-                client.sendMessage(to, admin_text)
+                        msg_text += f"║ {i}. {admin_mid[:15]}...\n"
+                msg_text += "╚═══════════════════"
+                client.sendMessage(to, msg_text)
             else:
                 client.sendMessage(to, "❌ لا يوجد أدمنز")
         
-        # ===== الحظر =====
-        elif text_lower.startswith('ban ') and config.is_owner(sender):
+        elif text.startswith('حظر ') and db.is_owner(sender):
             if 'MENTION' in msg.contentMetadata:
                 import ast
                 mentions = ast.literal_eval(msg.contentMetadata['MENTION'])
                 
-                for mention in mentions['MENTIONEES']:
-                    target = mention['M']
-                    if not config.is_owner(target) and target not in config.data['banned']:
-                        config.data['banned'].append(target)
+                for m in mentions['MENTIONEES']:
+                    target = m['M']
+                    if not db.is_owner(target) and target not in db.data['banned']:
+                        db.data['banned'].append(target)
                 
-                config.save()
+                db.save()
                 client.sendMessage(to, "✅ تم الحظر")
+            else:
+                client.sendMessage(to, "❌ منشن العضو!")
         
-        elif text_lower.startswith('unban ') and config.is_owner(sender):
+        elif text.startswith('الغاء_حظر ') and db.is_owner(sender):
             if 'MENTION' in msg.contentMetadata:
                 import ast
                 mentions = ast.literal_eval(msg.contentMetadata['MENTION'])
                 
-                for mention in mentions['MENTIONEES']:
-                    target = mention['M']
-                    if target in config.data['banned']:
-                        config.data['banned'].remove(target)
+                for m in mentions['MENTIONEES']:
+                    target = m['M']
+                    if target in db.data['banned']:
+                        db.data['banned'].remove(target)
                 
-                config.save()
+                db.save()
                 client.sendMessage(to, "✅ تم إلغاء الحظر")
+            else:
+                client.sendMessage(to, "❌ منشن العضو!")
         
-        elif text_lower == 'banlist' and config.is_admin(sender):
-            if config.data['banned']:
-                ban_text = "╔═══ 🚫 Banned ═══\n"
-                for i, banned_mid in enumerate(config.data['banned'][:20], 1):
-                    ban_text += f"║ {i}. {banned_mid[:20]}...\n"
-                ban_text += f"╚═══ Total: {len(config.data['banned'])} ═══"
-                client.sendMessage(to, ban_text)
+        elif text == 'قائمة_المحظورين' and db.is_admin(sender):
+            if db.data['banned']:
+                msg_text = "╔═══ 🚫 المحظورين ═══\n"
+                for i, banned_mid in enumerate(db.data['banned'][:20], 1):
+                    msg_text += f"║ {i}. {banned_mid[:15]}...\n"
+                msg_text += f"╚═══ المجموع: {len(db.data['banned'])} ═══"
+                client.sendMessage(to, msg_text)
             else:
                 client.sendMessage(to, "✅ لا يوجد محظورين")
         
         # ===== إدارة الرابط =====
-        elif text_lower == 'openqr' and config.is_admin(sender) and is_group:
+        elif text == 'فتح_الرابط' and db.is_admin(sender) and is_group:
             group = client.getGroup(to)
             group.preventedJoinByTicket = False
             client.updateGroup(group)
-            client.sendMessage(to, "🔓 تم فتح رابط المجموعة")
+            client.sendMessage(to, "🔓 تم فتح الرابط")
         
-        elif text_lower == 'closeqr' and config.is_admin(sender) and is_group:
+        elif text == 'اغلاق_الرابط' and db.is_admin(sender) and is_group:
             group = client.getGroup(to)
             group.preventedJoinByTicket = True
             client.updateGroup(group)
-            client.sendMessage(to, "🔒 تم إغلاق رابط المجموعة")
+            client.sendMessage(to, "🔒 تم إغلاق الرابط")
         
-        elif text_lower == 'getqr' and config.is_admin(sender) and is_group:
+        elif text == 'جلب_الرابط' and db.is_admin(sender) and is_group:
             try:
                 ticket = client.reissueGroupTicket(to)
-                client.sendMessage(to, f"🔗 رابط المجموعة:\nhttps://line.me/R/ti/g/{ticket}")
+                client.sendMessage(to, 
+                    f"🔗 رابط المجموعة:\n"
+                    f"https://line.me/R/ti/g/{ticket}")
             except:
-                client.sendMessage(to, "❌ الرابط مغلق!\nاستخدم: openqr")
+                client.sendMessage(to, 
+                    "❌ الرابط مغلق!\n"
+                    "استخدم: فتح_الرابط")
         
-        # ===== المغادرة =====
-        elif text_lower == 'leave' and config.is_admin(sender) and is_group:
+        elif text == 'مغادرة' and db.is_admin(sender) and is_group:
             client.sendMessage(to, "👋 وداعاً!")
             time.sleep(1)
             client.leaveGroup(to)
+    
+    except Exception as e:
+        print(f"❌ خطأ في الرسالة: {e}")
+
+# ========== الحلقة الرئيسية ==========
+print("\n🚀 البوت يعمل الآن...")
+print("💡 اضغط Ctrl+C للإيقاف\n")
+print("="*60)
+
+last_save = time.time()
+
+try:
+    while True:
+        try:
+            ops = oepoll.fetchOperations()
+            
+            for op in ops:
+                handle_op(op)
+            
+            # حفظ كل 5 دقائق
+            if time.time() - last_save > 300:
+                db.save()
+                last_save = time.time()
+                print(f"💾 [{datetime.now().strftime('%H:%M:%S')}] حفظ تلقائي")
         
-        # ===== الإعدادات التلقائية =====
-        elif text_lower == 'autoadd on' and config.is_owner(sender):
-            config.data['auto']['add'] = True
-            config.save()
-            client.sendMessage(to, "✅ الإضافة التلقائية مفعلة")
-        
-        elif text_lower == 'autoadd off' and config.is_owner(sender):
-            config.data['auto']['add'] = False
-            config.save()
-            client.sendMessage(to, "❌ الإضافة التلقائية معطلة")
-        
-        elif text_lower == 'autojoin on' and config.is_owner(sender):
-            config.data['auto']['join'] = True
-            config.save()
-            client.sendMessage(to, "✅ الانضمام التلقائي مفعل")
-        
-        elif text_lower == 'autojoin off' and config.is_owner(sender):
-            config.data['auto']['join'] = False
-            config.save()
-            client.sendMessage(to, "❌ الانضمام التلقائي معطل")
-        
-    except Exception as e
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            print(f"❌ خطأ: {e}")
+            time.sleep(3)
+
+except KeyboardInterrupt:
+    print("\n\n⏹️ إيقاف البوت...")
+    db.save()
+    print("💾 تم حفظ البيانات")
+    print("👋 وداعاً!")
