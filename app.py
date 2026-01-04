@@ -5,13 +5,10 @@ import getpass
 from datetime import datetime
 from collections import defaultdict
 
-print("\n" + "="*60)
 print("بوت حماية LINE")
-print("="*60)
 
 try:
     from linepy import LINE, OEPoll
-    print("linepy جاهز")
 except ImportError:
     print("linepy غير مثبت!")
     exit(1)
@@ -63,8 +60,7 @@ def login():
     if os.path.exists(TOKEN_FILE):
         try:
             with open(TOKEN_FILE) as f:
-                token = f.read().strip()
-            return LINE(token)
+                return LINE(f.read().strip())
         except:
             os.remove(TOKEN_FILE)
     email = input("البريد: ").strip()
@@ -82,7 +78,7 @@ if my_mid not in db["owners"]:
     db["owners"].append(my_mid)
     save_db()
 
-print(f"البوت جاهز: {cl.profile.displayName}\n")
+print(f"البوت جاهز: {cl.profile.displayName}")
 
 def is_owner(u):
     return u in db["owners"]
@@ -126,14 +122,14 @@ def get_warns(u):
 
 def safe_kick(g, target):
     try:
-        if target == my_mid or is_owner(target):
-            return False
-        cl.kickoutFromGroup(g, [target])
-        db["stats"]["kicks"] += 1
-        save_db()
-        return True
+        if target != my_mid and not is_owner(target):
+            cl.kickoutFromGroup(g, [target])
+            db["stats"]["kicks"] += 1
+            save_db()
+            return True
     except:
-        return False
+        pass
+    return False
 
 def get_mentioned(msg):
     try:
@@ -141,7 +137,8 @@ def get_mentioned(msg):
             data = msg.contentMetadata["MENTION"]
             return data.split('"M":"')[1].split('"')[0]
     except:
-        return None
+        pass
+    return None
 
 def send(g, text):
     if not db["ghost_mode"]:
@@ -152,172 +149,173 @@ def handle_msg(msg):
         return
     text = msg.text.strip()
     cmd = text.lower()
-    sender = msg._from
-    group = msg.to
+    s = msg._from
+    g = msg.to
     db["stats"]["messages"] += 1
     if not db["enabled"]:
         return
-    if is_banned(sender):
-        safe_kick(group, sender)
+    if is_banned(s):
+        safe_kick(g, s)
         return
-    if is_muted(sender):
-        safe_kick(group, sender)
+    if is_muted(s):
+        safe_kick(g, s)
         return
-    if db["lock"].get(group) and not is_admin(sender):
-        safe_kick(group, sender)
+    if db["lock"].get(g) and not is_admin(s):
+        safe_kick(g, s)
         return
-    if db["shield_mode"] and not is_admin(sender):
-        safe_kick(group, sender)
+    if db["shield_mode"] and not is_admin(s):
+        safe_kick(g, s)
         return
-    if is_spam(sender):
+    if is_spam(s):
         return
+    
     if text == ".":
-        send(group, ".")
+        send(g, ".")
     elif cmd == "id":
-        send(group, sender)
+        send(g, s)
     elif cmd == "gid":
-        send(group, group)
-    elif cmd == "r" and is_admin(sender):
+        send(g, g)
+    elif cmd == "r" and is_admin(s):
         global db
         db = load_db()
-        send(group, "تم")
-    elif cmd in ["sk", "x"] and is_admin(sender):
+        send(g, "تم")
+    elif cmd in ["sk", "x"] and is_admin(s):
         t = get_mentioned(msg)
-        if t and not is_owner(t):
-            safe_kick(group, t)
-    elif cmd in ["sm", "z"] and is_admin(sender):
+        if t:
+            safe_kick(g, t)
+    elif cmd in ["sm", "z"] and is_admin(s):
         t = get_mentioned(msg)
-        if t and not is_owner(t) and t not in db["muted"]:
+        if t and t not in db["muted"]:
             db["muted"].append(t)
             save_db()
-    elif cmd == "zz" and is_admin(sender):
+    elif cmd == "zz" and is_admin(s):
         t = get_mentioned(msg)
         if t and t in db["muted"]:
             db["muted"].remove(t)
             save_db()
-    elif cmd == "sw" and is_admin(sender):
+    elif cmd == "sw" and is_admin(s):
         t = get_mentioned(msg)
-        if t and not is_owner(t):
+        if t:
             add_warn(t)
     elif cmd == "help":
-        send(group, "أوامر البوت:\nhelp, myid, warns, stats\nkick, ban, mute, warn, lock\nadmin add, vip add")
+        send(g, "help, id, warns, stats, kick, ban, mute, warn, lock, admin add")
     elif cmd == "myid":
-        send(group, sender)
+        send(g, s)
     elif cmd == "warns":
-        send(group, f"تحذيرات: {get_warns(sender)}")
+        send(g, f"تحذيرات: {get_warns(s)}")
     elif cmd == "stats":
-        send(group, f"طردات: {db['stats']['kicks']}\nحظر: {db['stats']['bans']}")
-    elif cmd == "kick" and is_admin(sender):
+        send(g, f"طردات: {db['stats']['kicks']}, حظر: {db['stats']['bans']}")
+    elif cmd == "kick" and is_admin(s):
         t = get_mentioned(msg)
-        if t and not is_owner(t):
-            safe_kick(group, t)
-            send(group, "تم")
-    elif cmd == "ban" and is_admin(sender):
+        if t:
+            safe_kick(g, t)
+            send(g, "تم")
+    elif cmd == "ban" and is_admin(s):
         t = get_mentioned(msg)
-        if t and not is_owner(t) and t not in db["banned"]:
+        if t and t not in db["banned"]:
             db["banned"].append(t)
             save_db()
-            safe_kick(group, t)
+            safe_kick(g, t)
             db["stats"]["bans"] += 1
-            send(group, "تم")
-    elif cmd == "unban" and is_admin(sender):
+            send(g, "تم")
+    elif cmd == "unban" and is_admin(s):
         t = get_mentioned(msg)
         if t and t in db["banned"]:
             db["banned"].remove(t)
             save_db()
-            send(group, "تم")
-    elif cmd == "mute" and is_admin(sender):
+            send(g, "تم")
+    elif cmd == "mute" and is_admin(s):
         t = get_mentioned(msg)
-        if t and not is_owner(t) and t not in db["muted"]:
+        if t and t not in db["muted"]:
             db["muted"].append(t)
             save_db()
-            send(group, "تم")
-    elif cmd == "unmute" and is_admin(sender):
+            send(g, "تم")
+    elif cmd == "unmute" and is_admin(s):
         t = get_mentioned(msg)
         if t and t in db["muted"]:
             db["muted"].remove(t)
             save_db()
-            send(group, "تم")
-    elif cmd == "warn" and is_admin(sender):
+            send(g, "تم")
+    elif cmd == "warn" and is_admin(s):
         t = get_mentioned(msg)
-        if t and not is_owner(t):
+        if t:
             w = add_warn(t)
-            send(group, f"تحذير: {w}/{AUTO_WARN_LIMIT}")
+            send(g, f"تحذير: {w}/{AUTO_WARN_LIMIT}")
             if w >= AUTO_WARN_LIMIT:
-                safe_kick(group, t)
+                safe_kick(g, t)
                 clear_warn(t)
-    elif cmd == "clearwarn" and is_admin(sender):
+    elif cmd == "clearwarn" and is_admin(s):
         t = get_mentioned(msg)
         if t:
             clear_warn(t)
-            send(group, "تم")
-    elif cmd == "lock" and is_admin(sender):
-        db["lock"][group] = True
+            send(g, "تم")
+    elif cmd == "lock" and is_admin(s):
+        db["lock"][g] = True
         save_db()
-        send(group, "تم")
-    elif cmd == "unlock" and is_admin(sender):
-        db["lock"][group] = False
+        send(g, "تم")
+    elif cmd == "unlock" and is_admin(s):
+        db["lock"][g] = False
         save_db()
-        send(group, "تم")
-    elif cmd == "ghost on" and is_admin(sender):
+        send(g, "تم")
+    elif cmd == "ghost on" and is_admin(s):
         db["ghost_mode"] = True
         save_db()
-    elif cmd == "ghost off" and is_admin(sender):
+    elif cmd == "ghost off" and is_admin(s):
         db["ghost_mode"] = False
         save_db()
-        send(group, "تم")
-    elif cmd == "shield on" and is_admin(sender):
+        send(g, "تم")
+    elif cmd == "shield on" and is_admin(s):
         db["shield_mode"] = True
         save_db()
-        send(group, "تم")
-    elif cmd == "shield off" and is_admin(sender):
+        send(g, "تم")
+    elif cmd == "shield off" and is_admin(s):
         db["shield_mode"] = False
         save_db()
-        send(group, "تم")
-    elif cmd.startswith("admin add") and is_owner(sender):
+        send(g, "تم")
+    elif cmd.startswith("admin add") and is_owner(s):
         t = get_mentioned(msg)
         if t and t not in db["admins"]:
             db["admins"].append(t)
             save_db()
-            send(group, "تم")
-    elif cmd.startswith("admin remove") and is_owner(sender):
+            send(g, "تم")
+    elif cmd.startswith("admin remove") and is_owner(s):
         t = get_mentioned(msg)
         if t and t in db["admins"]:
             db["admins"].remove(t)
             save_db()
-            send(group, "تم")
-    elif cmd.startswith("vip add") and is_owner(sender):
+            send(g, "تم")
+    elif cmd.startswith("vip add") and is_owner(s):
         t = get_mentioned(msg)
         if t and t not in db["vip"]:
             db["vip"].append(t)
             save_db()
-            send(group, "تم")
-    elif cmd.startswith("vip remove") and is_owner(sender):
+            send(g, "تم")
+    elif cmd.startswith("vip remove") and is_owner(s):
         t = get_mentioned(msg)
         if t and t in db["vip"]:
             db["vip"].remove(t)
             save_db()
-            send(group, "تم")
-    elif cmd == "enable" and is_owner(sender):
+            send(g, "تم")
+    elif cmd == "enable" and is_owner(s):
         db["enabled"] = True
         save_db()
-        send(group, "تم")
-    elif cmd == "disable" and is_owner(sender):
+        send(g, "تم")
+    elif cmd == "disable" and is_owner(s):
         db["enabled"] = False
         save_db()
-        send(group, "تم")
+        send(g, "تم")
 
-def handle_op(op_obj):
+def handle_op(o):
     try:
-        if op_obj.type == 13:
-            if is_banned(op_obj.param3):
-                safe_kick(op_obj.param1, op_obj.param3)
-        elif op_obj.type == 19:
-            if op_obj.param3 == my_mid and not is_owner(op_obj.param2):
+        if o.type == 13:
+            if is_banned(o.param3):
+                safe_kick(o.param1, o.param3)
+        elif o.type == 19:
+            if o.param3 == my_mid and not is_owner(o.param2):
                 time.sleep(2)
                 try:
-                    cl.acceptGroupInvitation(op_obj.param1)
-                    safe_kick(op_obj.param1, op_obj.param2)
+                    cl.acceptGroupInvitation(o.param1)
+                    safe_kick(o.param1, o.param2)
                 except:
                     pass
     except:
