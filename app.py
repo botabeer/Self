@@ -1,19 +1,11 @@
 import json
 import time
 import os
-import getpass
 import re
-import hashlib
 from datetime import datetime
 from collections import defaultdict
-
-try:
-    from linepy import LINE, OEPoll
-except ImportError:
-    print("مكتبة linepy غير مثبتة")
-    print("ثبتها بالأمر:")
-    print("pip install git+https://github.com/dyseo/linepy.git")
-    exit(1)
+import requests
+import base64
 
 # ============ CONFIG ============
 
@@ -29,6 +21,9 @@ MASSKICK_BATCH = 4
 MASSKICK_DELAY = 2
 
 LINK_REGEX = re.compile(r"(line\.me|chat\.line|t\.me|telegram\.me|wa\.me|whatsapp\.com)", re.I)
+
+LINE_API = "https://gd2.line.naver.jp"
+LINE_API_QUERY = "https://gd2.line.naver.jp/api/v4/TalkService.do"
 
 # ============ DEFAULT DB ============
 
@@ -87,34 +82,113 @@ def log(txt):
 
 db = load_db()
 
+# ============ LINE API CLASS ============
+
+class LineClient:
+    def __init__(self, token):
+        self.token = token
+        self.headers = {
+            "X-Line-Access": token,
+            "User-Agent": "Line/10.0.0",
+            "X-Line-Application": "DESKTOPMAC 10.0.0 MAC 10.0.0"
+        }
+        self.my_mid = self.get_profile()["mid"]
+        
+    def _post(self, path, data):
+        try:
+            r = requests.post(f"{LINE_API}{path}", headers=self.headers, json=data)
+            return r.json()
+        except:
+            return {}
+    
+    def get_profile(self):
+        return self._post("/api/v4/TalkService.do", {
+            "method": "getProfile"
+        }).get("result", {})
+    
+    def send_message(self, to, text):
+        return self._post("/api/v4/TalkService.do", {
+            "method": "sendMessage",
+            "params": {
+                "to": to,
+                "text": text
+            }
+        })
+    
+    def kick_user(self, group_id, user_ids):
+        return self._post("/api/v4/TalkService.do", {
+            "method": "kickoutFromGroup",
+            "params": {
+                "groupId": group_id,
+                "contactIds": user_ids if isinstance(user_ids, list) else [user_ids]
+            }
+        })
+    
+    def get_group(self, group_id):
+        return self._post("/api/v4/TalkService.do", {
+            "method": "getGroup",
+            "params": {
+                "groupId": group_id
+            }
+        }).get("result", {})
+    
+    def accept_group_invitation(self, group_id):
+        return self._post("/api/v4/TalkService.do", {
+            "method": "acceptGroupInvitation",
+            "params": {
+                "groupId": group_id
+            }
+        })
+    
+    def get_recent_messages(self, limit=50):
+        return self._post("/api/v4/TalkService.do", {
+            "method": "getRecentMessages",
+            "params": {
+                "count": limit
+            }
+        }).get("result", [])
+
 # ============ LOGIN ============
 
 def login():
     if os.path.exists(TOKEN_FILE):
         try:
             token = open(TOKEN_FILE).read().strip()
-            return LINE(token)
+            print("جاري تسجيل الدخول...")
+            client = LineClient(token)
+            print("تم تسجيل الدخول بنجاح")
+            return client
         except Exception as e:
-            print(f"فشل تسجيل الدخول بالتوكن: {e}")
+            print(f"فشل التوكن: {e}")
             os.remove(TOKEN_FILE)
-
-    email = input("Email: ").strip()
-    password = getpass.getpass("Password: ")
-    cl = LINE(email, password)
-    with open(TOKEN_FILE, "w") as f:
-        f.write(cl.authToken)
-    return cl
+    
+    print("\nللحصول على التوكن:")
+    print("1. افتح LINE على الكمبيوتر")
+    print("2. اضغط F12 > Network")
+    print("3. ابحث عن X-Line-Access في الهيدرز")
+    print("4. انسخه والصقه هنا\n")
+    
+    token = input("التوكن: ").strip()
+    
+    try:
+        client = LineClient(token)
+        with open(TOKEN_FILE, "w") as f:
+            f.write(token)
+        print("تم حفظ التوكن بنجاح")
+        return client
+    except Exception as e:
+        print(f"خطأ في التوكن: {e}")
+        exit(1)
 
 cl = login()
-op = OEPoll(cl)
-my_mid = cl.profile.mid
+my_mid = cl.my_mid
 
 if my_mid not in db["owners"]:
     db["owners"].append(my_mid)
     save_db()
 
-print("تم تشغيل البوت بنجاح")
 print(f"MID: {my_mid}")
+print("البوت يعمل الان...")
 
 # ============ HELPERS ============
 
@@ -142,20 +216,21 @@ def is_muted(u):
 def send(g, txt):
     if not db["ghost"]:
         try:
-            cl.sendMessage(g, txt)
+            cl.send_message(g, txt)
         except:
             pass
 
-def mentions(msg):
+def get_mentions(text):
+    mentions = []
     try:
-        if not hasattr(msg, 'contentMetadata') or not msg.contentMetadata:
-            return []
-        if "MENTION" not in msg.contentMetadata:
-            return []
-        data = json.loads(msg.contentMetadata["MENTION"])
-        return [m["M"] for m in data["MENTIONEES"]]
+        parts = text.split("@")
+        for part in parts[1:]:
+            mid = part.split()[0] if part else None
+            if mid and len(mid) == 33:
+                mentions.append(mid)
     except:
-        return []
+        pass
+    return mentions
 
 def add_warn(u):
     db["warnings"][u] = db["warnings"].get(u, 0) + 1
@@ -165,7 +240,7 @@ def add_warn(u):
 def safe_kick(g, u, silent=False):
     try:
         if u != my_mid and not is_owner(u):
-            cl.kickoutFromGroup(g, [u])
+            cl.kick_user(g, u)
             db["stats"]["kicks"] += 1
             save_db()
             log(f"KICK {u} in {g}")
@@ -196,26 +271,26 @@ def masskick(group, members):
         batch.append(u)
         if len(batch) >= MASSKICK_BATCH:
             try:
-                cl.kickoutFromGroup(group, batch)
+                cl.kick_user(group, batch)
             except:
                 pass
             time.sleep(MASSKICK_DELAY)
             batch = []
     if batch:
         try:
-            cl.kickoutFromGroup(group, batch)
+            cl.kick_user(group, batch)
         except:
             pass
 
 # ============ MESSAGE HANDLER ============
 
 def handle_msg(msg):
-    if not msg.text:
+    if not msg.get("text"):
         return
 
-    s = msg._from
-    g = msg.to
-    text = msg.text.strip()
+    s = msg.get("from")
+    g = msg.get("to")
+    text = msg.get("text", "").strip()
     cmd = text.lower()
 
     db["stats"]["messages"] += 1
@@ -268,9 +343,9 @@ def handle_msg(msg):
         save_db()
         return
 
-    m = mentions(msg)
+    m = get_mentions(text)
 
-    # ===== GENERAL =====
+    # ===== COMMANDS =====
 
     if cmd == "help":
         send(g,
@@ -283,28 +358,20 @@ stats - الإحصائيات
 
 أوامر الأدمن:
 kick - طرد عضو
-mute - كتم عضو (10 دقائق)
+mute - كتم عضو
 unmute - فك كتم
-warn - تحذير عضو
+warn - تحذير
 clearwarn - حذف تحذيرات
 lock - قفل الشات
 unlock - فتح الشات
-watch - مراقبة عضو
-unwatch - إلغاء المراقبة
 
 أوامر المالك:
 addadmin - إضافة أدمن
-deladmin - حذف أدمن
-ban - حظر عضو
+ban - حظر
 unban - فك حظر
-masskick - طرد جميع الأعضاء
+masskick - طرد الجميع
 panic - وضع الطوارئ
-ghost - الوضع الشبحي
-unghost - إلغاء الوضع الشبحي
-shield - تفعيل الدرع
-unshield - إلغاء الدرع
-freeze - تجميد الروم
-unfreeze - فك التجميد""")
+ghost - وضع شبحي""")
 
     elif cmd == "me":
         role = "مالك" if is_owner(s) else "أدمن" if is_admin(s) else "عضو"
@@ -315,9 +382,7 @@ unfreeze - فك التجميد""")
         send(g, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     elif cmd == "ping":
-        start = time.time()
-        elapsed = round((time.time() - start) * 1000, 2)
-        send(g, f"Pong - {elapsed}ms")
+        send(g, "Pong - البوت يعمل")
 
     elif cmd == "stats":
         stats_text = f"""إحصائيات البوت:
@@ -338,38 +403,32 @@ unfreeze - فك التجميد""")
 
     elif cmd == "warn" and is_admin(s):
         if not m:
-            send(g, "منشن العضو المراد تحذيره")
+            send(g, "منشن العضو")
             return
         for u in m:
             w = add_warn(u)
             send(g, f"تحذير {w}/{AUTO_WARN_LIMIT}")
 
     elif cmd == "clearwarn" and is_admin(s):
-        if not m:
-            send(g, "منشن العضو لحذف تحذيراته")
-            return
-        for u in m:
-            db["warnings"].pop(u, None)
-        save_db()
-        send(g, "تم حذف التحذيرات")
+        if m:
+            for u in m:
+                db["warnings"].pop(u, None)
+            save_db()
+            send(g, "تم حذف التحذيرات")
 
     elif cmd == "mute" and is_admin(s):
-        if not m:
-            send(g, "منشن العضو المراد كتمه")
-            return
-        for u in m:
-            db["muted"][u] = time.time() + 600
-        save_db()
-        send(g, "تم كتم العضو لمدة 10 دقائق")
+        if m:
+            for u in m:
+                db["muted"][u] = time.time() + 600
+            save_db()
+            send(g, "تم الكتم لمدة 10 دقائق")
 
     elif cmd == "unmute" and is_admin(s):
-        if not m:
-            send(g, "منشن العضو لفك كتمه")
-            return
-        for u in m:
-            db["muted"].pop(u, None)
-        save_db()
-        send(g, "تم فك الكتم")
+        if m:
+            for u in m:
+                db["muted"].pop(u, None)
+            save_db()
+            send(g, "تم فك الكتم")
 
     elif cmd == "lock" and is_admin(s):
         db["lock"][g] = True
@@ -381,74 +440,40 @@ unfreeze - فك التجميد""")
         save_db()
         send(g, "تم فتح الشات")
 
-    elif cmd == "watch" and is_admin(s):
-        if not m:
-            send(g, "منشن العضو لمراقبته")
-            return
-        for u in m:
-            db["watch"][u] = 0
-        save_db()
-        send(g, "تمت إضافة العضو للمراقبة")
-
-    elif cmd == "unwatch" and is_admin(s):
-        if not m:
-            send(g, "منشن العضو لإلغاء مراقبته")
-            return
-        for u in m:
-            db["watch"].pop(u, None)
-        save_db()
-        send(g, "تم إيقاف المراقبة")
-
     # ===== OWNER =====
 
     elif cmd == "addadmin" and is_owner(s):
-        if not m:
-            send(g, "منشن العضو لإضافته كأدمن")
-            return
-        for u in m:
-            if u not in db["admins"]:
-                db["admins"].append(u)
-        save_db()
-        send(g, "تم إضافة الأدمن")
-
-    elif cmd == "deladmin" and is_owner(s):
-        if not m:
-            send(g, "منشن الأدمن لحذفه")
-            return
-        for u in m:
-            if u in db["admins"]:
-                db["admins"].remove(u)
-        save_db()
-        send(g, "تم حذف الأدمن")
+        if m:
+            for u in m:
+                if u not in db["admins"]:
+                    db["admins"].append(u)
+            save_db()
+            send(g, "تم إضافة الأدمن")
 
     elif cmd == "ban" and is_owner(s):
-        if not m:
-            send(g, "منشن العضو لحظره")
-            return
-        for u in m:
-            if u not in db["banned"]:
-                db["banned"].append(u)
-                db["stats"]["bans"] += 1
-                safe_kick(g, u, True)
-        save_db()
-        send(g, "تم حظر العضو")
+        if m:
+            for u in m:
+                if u not in db["banned"]:
+                    db["banned"].append(u)
+                    db["stats"]["bans"] += 1
+                    safe_kick(g, u, True)
+            save_db()
+            send(g, "تم الحظر")
 
     elif cmd == "unban" and is_owner(s):
-        if not m:
-            send(g, "منشن العضو لفك حظره")
-            return
-        for u in m:
-            if u in db["banned"]:
-                db["banned"].remove(u)
-        save_db()
-        send(g, "تم فك الحظر")
+        if m:
+            for u in m:
+                if u in db["banned"]:
+                    db["banned"].remove(u)
+            save_db()
+            send(g, "تم فك الحظر")
 
     elif cmd == "masskick" and is_owner(s):
         try:
-            group = cl.getGroup(g)
-            members = [mem.mid for mem in group.members]
+            group = cl.get_group(g)
+            members = [mem["mid"] for mem in group.get("members", [])]
             masskick(g, members)
-            send(g, "تم طرد جميع الأعضاء")
+            send(g, "تم طرد الجميع")
         except Exception as e:
             log(f"Masskick error: {e}")
 
@@ -456,7 +481,7 @@ unfreeze - فك التجميد""")
         db["shield"] = True
         db["freeze"] = True
         save_db()
-        send(g, "تم تفعيل وضع الطوارئ")
+        send(g, "وضع الطوارئ مفعل")
 
     elif cmd == "ghost" and is_owner(s):
         db["ghost"] = True
@@ -467,89 +492,30 @@ unfreeze - فك التجميد""")
         save_db()
         send(g, "تم إلغاء الوضع الشبحي")
 
-    elif cmd == "shield" and is_owner(s):
-        db["shield"] = True
-        save_db()
-        send(g, "تم تفعيل الدرع")
-
-    elif cmd == "unshield" and is_owner(s):
-        db["shield"] = False
-        save_db()
-        send(g, "تم إلغاء الدرع")
-
-    elif cmd == "freeze" and is_owner(s):
-        db["freeze"] = True
-        save_db()
-        send(g, "تم تجميد الروم")
-
-    elif cmd == "unfreeze" and is_owner(s):
-        db["freeze"] = False
-        save_db()
-        send(g, "تم فك تجميد الروم")
-
-# ============ OPS HANDLER ============
-
-def handle_op(o):
-    try:
-        # Anti-kick protection
-        if o.type == 19 and db["protect"]["kick"]:
-            kicker = o.param2
-            target = o.param3
-            group = o.param1
-
-            if target == my_mid:
-                try:
-                    cl.acceptGroupInvitation(group)
-                    time.sleep(1)
-                    safe_kick(group, kicker, True)
-                    db["stats"]["protections"] += 1
-                    save_db()
-                    log(f"Anti-kick: Kicked {kicker} from {group}")
-                except:
-                    pass
-
-        # Anti-invite protection
-        elif o.type == 13 and db["protect"]["invite"]:
-            inviter = o.param2
-            invited = o.param3
-            group = o.param1
-
-            if not is_admin(inviter) and invited != my_mid:
-                try:
-                    safe_kick(group, invited, True)
-                    db["stats"]["protections"] += 1
-                    save_db()
-                except:
-                    pass
-
-        # Auto-join groups
-        elif o.type == 13 and db["auto_join"]:
-            if o.param3 == my_mid:
-                try:
-                    cl.acceptGroupInvitation(o.param1)
-                except:
-                    pass
-
-    except Exception as e:
-        log(f"OP Handler error: {e}")
-
 # ============ MAIN LOOP ============
 
 def main():
-    print("البوت يعمل الآن...")
+    last_check = time.time()
+    
     while True:
         try:
-            for o in op.singleTrace(50):
-                if o.type == 26:
-                    handle_msg(o.message)
-                else:
-                    handle_op(o)
+            if time.time() - last_check > 1:
+                messages = cl.get_recent_messages(20)
+                
+                for msg in messages:
+                    if msg.get("type") == 1:  # Text message
+                        handle_msg(msg)
+                
+                last_check = time.time()
+            
+            time.sleep(1)
+            
         except KeyboardInterrupt:
             print("تم إيقاف البوت")
             break
         except Exception as e:
-            log(f"Error in main loop: {e}")
-            time.sleep(1)
+            log(f"Error: {e}")
+            time.sleep(2)
 
 if __name__ == "__main__":
     main()
