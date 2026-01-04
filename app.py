@@ -163,78 +163,113 @@ def send_msg(g, text):
 def handle_msg(msg):
     if not msg.text:
         return
+    
     text = msg.text.strip()
     cmd = text.lower()
     sender = msg._from
     group = msg.to
+    
     db["stats"]["messages"] += 1
+    
     if not db["enabled"]:
         return
+    
     if is_banned(sender):
         safe_kick(group, sender, "محظور")
         return
+    
     if is_muted(sender):
         safe_kick(group, sender, "مكتوم")
         return
+    
     if db["lock"].get(group) and not is_admin(sender):
         safe_kick(group, sender, "مقفل")
         return
+    
     if db["shield_mode"] and not is_admin(sender):
         safe_kick(group, sender, "درع")
         return
+    
     if is_spam(sender):
         return
+    
     if text == ".":
         send_msg(group, ".")
-    elif cmd == "id":
+        return
+    
+    if cmd == "id":
         send_msg(group, sender)
-    elif cmd == "gid":
+        return
+    
+    if cmd == "gid":
         send_msg(group, group)
-    elif cmd == "r" and is_admin(sender):
+        return
+    
+    if cmd == "r" and is_admin(sender):
         global db
         db = load_db()
         send_msg(group, "تم")
-    elif cmd in ["sk", "x"] and is_admin(sender):
+        return
+    
+    if cmd in ["sk", "x"] and is_admin(sender):
         t = get_mentioned(msg)
         if t and not is_owner(t):
             safe_kick(group, t, "صامت")
-    elif cmd in ["sm", "z"] and is_admin(sender):
+        return
+    
+    if cmd in ["sm", "z"] and is_admin(sender):
         t = get_mentioned(msg)
         if t and not is_owner(t) and t not in db["muted"]:
             db["muted"].append(t)
             save_db()
-    elif cmd == "zz" and is_admin(sender):
+        return
+    
+    if cmd == "zz" and is_admin(sender):
         t = get_mentioned(msg)
         if t and t in db["muted"]:
             db["muted"].remove(t)
             save_db()
-    elif cmd == "sw" and is_admin(sender):
+        return
+    
+    if cmd == "sw" and is_admin(sender):
         t = get_mentioned(msg)
         if t and not is_owner(t):
             add_warn(t)
-    elif cmd == "help":
+        return
+    
+    if cmd == "help":
         txt = """=== أوامر البوت ===
 عامة: help, myid, warns, stats
 مشرفين: kick, ban, mute, warn, lock
 مالك: admin add, protect on"""
         send_msg(group, txt)
-    elif cmd == "myid":
+        return
+    
+    if cmd == "myid":
         send_msg(group, f"معرفك:\n{sender}")
-    elif cmd == "warns":
+        return
+    
+    if cmd == "warns":
         w = get_warns(sender)
         send_msg(group, f"تحذيرات: {w}")
-    elif cmd == "stats":
+        return
+    
+    if cmd == "stats":
         txt = f"""إحصائيات:
 طردات: {db['stats']['kicks']}
 حظر: {db['stats']['bans']}
 رسائل: {db['stats']['messages']}"""
         send_msg(group, txt)
-    elif cmd == "kick" and is_admin(sender):
+        return
+    
+    if cmd == "kick" and is_admin(sender):
         t = get_mentioned(msg)
         if t and not is_owner(t):
             if safe_kick(group, t, "مشرف"):
                 send_msg(group, "تم")
-    elif cmd == "ban" and is_admin(sender):
+        return
+    
+    if cmd == "ban" and is_admin(sender):
         t = get_mentioned(msg)
         if t and not is_owner(t) and t not in db["banned"]:
             db["banned"].append(t)
@@ -242,25 +277,33 @@ def handle_msg(msg):
             safe_kick(group, t, "محظور")
             db["stats"]["bans"] += 1
             send_msg(group, "تم الحظر")
-    elif cmd == "unban" and is_admin(sender):
+        return
+    
+    if cmd == "unban" and is_admin(sender):
         t = get_mentioned(msg)
         if t and t in db["banned"]:
             db["banned"].remove(t)
             save_db()
             send_msg(group, "تم")
-    elif cmd == "mute" and is_admin(sender):
+        return
+    
+    if cmd == "mute" and is_admin(sender):
         t = get_mentioned(msg)
         if t and not is_owner(t) and t not in db["muted"]:
             db["muted"].append(t)
             save_db()
             send_msg(group, "تم الكتم")
-    elif cmd == "unmute" and is_admin(sender):
+        return
+    
+    if cmd == "unmute" and is_admin(sender):
         t = get_mentioned(msg)
         if t and t in db["muted"]:
             db["muted"].remove(t)
             save_db()
             send_msg(group, "تم")
-    elif cmd == "warn" and is_admin(sender):
+        return
+    
+    if cmd == "warn" and is_admin(sender):
         t = get_mentioned(msg)
         if t and not is_owner(t):
             w = add_warn(t)
@@ -268,76 +311,107 @@ def handle_msg(msg):
             if w >= AUTO_WARN_LIMIT:
                 safe_kick(group, t, "تحذيرات")
                 clear_warn(t)
-    elif cmd == "clearwarn" and is_admin(sender):
+        return
+    
+    if cmd == "clearwarn" and is_admin(sender):
         t = get_mentioned(msg)
         if t:
             clear_warn(t)
             send_msg(group, "تم")
-    elif cmd == "lock" and is_admin(sender):
+        return
+    
+    if cmd == "lock" and is_admin(sender):
         db["lock"][group] = True
         save_db()
         send_msg(group, "تم القفل")
-    elif cmd == "unlock" and is_admin(sender):
+        return
+    
+    if cmd == "unlock" and is_admin(sender):
         db["lock"][group] = False
         save_db()
         send_msg(group, "تم الفتح")
-    elif cmd == "ghost on" and is_admin(sender):
+        return
+    
+    if cmd == "ghost on" and is_admin(sender):
         db["ghost_mode"] = True
         save_db()
-    elif cmd == "ghost off" and is_admin(sender):
+        return
+    
+    if cmd == "ghost off" and is_admin(sender):
         db["ghost_mode"] = False
         save_db()
         send_msg(group, "تم")
-    elif cmd == "shield on" and is_admin(sender):
+        return
+    
+    if cmd == "shield on" and is_admin(sender):
         db["shield_mode"] = True
         save_db()
         send_msg(group, "تم")
-    elif cmd == "shield off" and is_admin(sender):
+        return
+    
+    if cmd == "shield off" and is_admin(sender):
         db["shield_mode"] = False
         save_db()
         send_msg(group, "تم")
-    elif cmd.startswith("admin add") and is_owner(sender):
+        return
+    
+    if cmd.startswith("admin add") and is_owner(sender):
         t = get_mentioned(msg)
         if t and t not in db["admins"]:
             db["admins"].append(t)
             save_db()
             send_msg(group, "تم")
-    elif cmd.startswith("admin remove") and is_owner(sender):
+        return
+    
+    if cmd.startswith("admin remove") and is_owner(sender):
         t = get_mentioned(msg)
         if t and t in db["admins"]:
             db["admins"].remove(t)
             save_db()
             send_msg(group, "تم")
-    elif cmd.startswith("vip add") and is_owner(sender):
+        return
+    
+    if cmd.startswith("vip add") and is_owner(sender):
         t = get_mentioned(msg)
         if t and t not in db["vip"]:
             db["vip"].append(t)
             save_db()
             send_msg(group, "تم")
-    elif cmd.startswith("vip remove") and is_owner(sender):
+        return
+    
+    if cmd.startswith("vip remove") and is_owner(sender):
         t = get_mentioned(msg)
         if t and t in db["vip"]:
             db["vip"].remove(t)
             save_db()
             send_msg(group, "تم")
-    elif cmd == "protect on" and is_owner(sender):
+        return
+    
+    if cmd == "protect on" and is_owner(sender):
         for k in db["protect"]:
             db["protect"][k] = True
         save_db()
         send_msg(group, "تم")
-    elif cmd == "protect off" and is_owner(sender):
+        return
+    
+    if cmd == "protect off" and is_owner(sender):
         for k in db["protect"]:
             db["protect"][k] = False
         save_db()
         send_msg(group, "تم")
-    elif cmd == "enable" and is_owner(sender):
+        return
+    
+    if cmd == "enable" and is_owner(sender):
         db["enabled"] = True
         save_db()
         send_msg(group, "تم")
-    elif cmd == "disable" and is_owner(sender):
+        return
+    
+    if cmd == "disable" and is_owner(sender):
         db["enabled"] = False
         save_db()
         send_msg(group, "تم")
+        return
 
 def handle_op(op_obj):
     try:
