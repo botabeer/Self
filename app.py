@@ -387,4 +387,4 @@ def handle_message(msg):
             add_warn(target, True)
         return
     
-    elif text_lower
+    elif text_lower == "start":
