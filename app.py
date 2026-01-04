@@ -13,7 +13,7 @@ try:
     from linepy import LINE, OEPoll
     print("linepy جاهز")
 except ImportError:
-    print("\nlinepy غير مثبت!")
+    print("linepy غير مثبت!")
     exit(1)
 
 DB_FILE = "db.json"
@@ -62,7 +62,7 @@ def log(text):
         f.write(f"[{timestamp}] {text}\n")
 
 def login():
-    print("\nتسجيل الدخول")
+    print("تسجيل الدخول")
     if os.path.exists(TOKEN_FILE):
         try:
             with open(TOKEN_FILE) as f:
@@ -92,8 +92,7 @@ if my_mid not in db["owners"]:
     db["owners"].append(my_mid)
     save_db()
 
-print(f"\nالبوت جاهز: {cl.profile.displayName}")
-print("="*60 + "\n")
+print(f"\nالبوت جاهز: {cl.profile.displayName}\n")
 
 def is_owner(u):
     return u in db["owners"]
@@ -163,112 +162,84 @@ def send_msg(g, text):
 def handle_msg(msg):
     if not msg.text:
         return
-    
     text = msg.text.strip()
     cmd = text.lower()
     sender = msg._from
     group = msg.to
-    
     db["stats"]["messages"] += 1
-    
     if not db["enabled"]:
         return
-    
     if is_banned(sender):
         safe_kick(group, sender, "محظور")
         return
-    
     if is_muted(sender):
         safe_kick(group, sender, "مكتوم")
         return
-    
     if db["lock"].get(group) and not is_admin(sender):
         safe_kick(group, sender, "مقفل")
         return
-    
     if db["shield_mode"] and not is_admin(sender):
         safe_kick(group, sender, "درع")
         return
-    
     if is_spam(sender):
         return
-    
     if text == ".":
         send_msg(group, ".")
         return
-    
     if cmd == "id":
         send_msg(group, sender)
         return
-    
     if cmd == "gid":
         send_msg(group, group)
         return
-    
     if cmd == "r" and is_admin(sender):
         global db
         db = load_db()
         send_msg(group, "تم")
         return
-    
     if cmd in ["sk", "x"] and is_admin(sender):
         t = get_mentioned(msg)
         if t and not is_owner(t):
             safe_kick(group, t, "صامت")
         return
-    
     if cmd in ["sm", "z"] and is_admin(sender):
         t = get_mentioned(msg)
         if t and not is_owner(t) and t not in db["muted"]:
             db["muted"].append(t)
             save_db()
         return
-    
     if cmd == "zz" and is_admin(sender):
         t = get_mentioned(msg)
         if t and t in db["muted"]:
             db["muted"].remove(t)
             save_db()
         return
-    
     if cmd == "sw" and is_admin(sender):
         t = get_mentioned(msg)
         if t and not is_owner(t):
             add_warn(t)
         return
-    
     if cmd == "help":
-        txt = """=== أوامر البوت ===
-عامة: help, myid, warns, stats
-مشرفين: kick, ban, mute, warn, lock
-مالك: admin add, protect on"""
+        txt = "=== أوامر البوت ===\nعامة: help, myid, warns, stats\nمشرفين: kick, ban, mute, warn, lock\nمالك: admin add, protect on"
         send_msg(group, txt)
         return
-    
     if cmd == "myid":
         send_msg(group, f"معرفك:\n{sender}")
         return
-    
     if cmd == "warns":
         w = get_warns(sender)
         send_msg(group, f"تحذيرات: {w}")
         return
-    
     if cmd == "stats":
-        txt = f"""إحصائيات:
-طردات: {db['stats']['kicks']}
-حظر: {db['stats']['bans']}
-رسائل: {db['stats']['messages']}"""
+        txt = f"إحصائيات:\nطردات: {db['stats']['kicks']}\nحظر: {db['stats']['bans']}\nرسائل: {db['stats']['messages']}"
         send_msg(group, txt)
         return
-    
     if cmd == "kick" and is_admin(sender):
         t = get_mentioned(msg)
         if t and not is_owner(t):
             if safe_kick(group, t, "مشرف"):
                 send_msg(group, "تم")
         return
-    
     if cmd == "ban" and is_admin(sender):
         t = get_mentioned(msg)
         if t and not is_owner(t) and t not in db["banned"]:
@@ -278,7 +249,6 @@ def handle_msg(msg):
             db["stats"]["bans"] += 1
             send_msg(group, "تم الحظر")
         return
-    
     if cmd == "unban" and is_admin(sender):
         t = get_mentioned(msg)
         if t and t in db["banned"]:
@@ -286,7 +256,6 @@ def handle_msg(msg):
             save_db()
             send_msg(group, "تم")
         return
-    
     if cmd == "mute" and is_admin(sender):
         t = get_mentioned(msg)
         if t and not is_owner(t) and t not in db["muted"]:
@@ -294,7 +263,6 @@ def handle_msg(msg):
             save_db()
             send_msg(group, "تم الكتم")
         return
-    
     if cmd == "unmute" and is_admin(sender):
         t = get_mentioned(msg)
         if t and t in db["muted"]:
@@ -302,7 +270,6 @@ def handle_msg(msg):
             save_db()
             send_msg(group, "تم")
         return
-    
     if cmd == "warn" and is_admin(sender):
         t = get_mentioned(msg)
         if t and not is_owner(t):
@@ -312,49 +279,41 @@ def handle_msg(msg):
                 safe_kick(group, t, "تحذيرات")
                 clear_warn(t)
         return
-    
     if cmd == "clearwarn" and is_admin(sender):
         t = get_mentioned(msg)
         if t:
             clear_warn(t)
             send_msg(group, "تم")
         return
-    
     if cmd == "lock" and is_admin(sender):
         db["lock"][group] = True
         save_db()
         send_msg(group, "تم القفل")
         return
-    
     if cmd == "unlock" and is_admin(sender):
         db["lock"][group] = False
         save_db()
         send_msg(group, "تم الفتح")
         return
-    
     if cmd == "ghost on" and is_admin(sender):
         db["ghost_mode"] = True
         save_db()
         return
-    
     if cmd == "ghost off" and is_admin(sender):
         db["ghost_mode"] = False
         save_db()
         send_msg(group, "تم")
         return
-    
     if cmd == "shield on" and is_admin(sender):
         db["shield_mode"] = True
         save_db()
         send_msg(group, "تم")
         return
-    
     if cmd == "shield off" and is_admin(sender):
         db["shield_mode"] = False
         save_db()
         send_msg(group, "تم")
         return
-    
     if cmd.startswith("admin add") and is_owner(sender):
         t = get_mentioned(msg)
         if t and t not in db["admins"]:
@@ -362,7 +321,6 @@ def handle_msg(msg):
             save_db()
             send_msg(group, "تم")
         return
-    
     if cmd.startswith("admin remove") and is_owner(sender):
         t = get_mentioned(msg)
         if t and t in db["admins"]:
@@ -370,7 +328,6 @@ def handle_msg(msg):
             save_db()
             send_msg(group, "تم")
         return
-    
     if cmd.startswith("vip add") and is_owner(sender):
         t = get_mentioned(msg)
         if t and t not in db["vip"]:
@@ -378,7 +335,6 @@ def handle_msg(msg):
             save_db()
             send_msg(group, "تم")
         return
-    
     if cmd.startswith("vip remove") and is_owner(sender):
         t = get_mentioned(msg)
         if t and t in db["vip"]:
@@ -386,27 +342,23 @@ def handle_msg(msg):
             save_db()
             send_msg(group, "تم")
         return
-    
     if cmd == "protect on" and is_owner(sender):
         for k in db["protect"]:
             db["protect"][k] = True
         save_db()
         send_msg(group, "تم")
         return
-    
     if cmd == "protect off" and is_owner(sender):
         for k in db["protect"]:
             db["protect"][k] = False
         save_db()
         send_msg(group, "تم")
         return
-    
     if cmd == "enable" and is_owner(sender):
         db["enabled"] = True
         save_db()
         send_msg(group, "تم")
         return
-    
     if cmd == "disable" and is_owner(sender):
         db["enabled"] = False
         save_db()
