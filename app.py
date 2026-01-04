@@ -2,8 +2,7 @@ import json
 import time
 import os
 import getpass
-import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import defaultdict
 
 print("\n" + "="*60)
@@ -21,7 +20,6 @@ except ImportError:
 DB_FILE = "db.json"
 LOG_FILE = "logs.txt"
 TOKEN_FILE = "token.txt"
-
 AUTO_WARN_LIMIT = 3
 SPAM_TIME = 2
 SPAM_COUNT = 5
@@ -49,9 +47,6 @@ DEFAULT_DB = {
         "flood": True
     },
     "whitelist_bots": [],
-    "kick_history": {},
-    "last_kick": "",
-    "last_ban": "",
     "stats": {
         "kicks": 0,
         "bans": 0,
@@ -90,32 +85,28 @@ def login():
     print("-"*60)
     if os.path.exists(TOKEN_FILE):
         try:
-            print("محاولة تسجيل الدخول بالتوكن المحفوظ...")
+            print("محاولة تسجيل الدخول بالتوكن...")
             with open(TOKEN_FILE) as f:
                 token = f.read().strip()
             client = LINE(token)
-            print("تم تسجيل الدخول بنجاح!")
+            print("تم تسجيل الدخول!")
             return client
         except:
-            print("التوكن غير صالح، جاري الحذف...")
+            print("التوكن غير صالح")
             os.remove(TOKEN_FILE)
-    print("\nاستخدم حساب LINE ثانوي فقط!")
-    email = input("البريد الإلكتروني: ").strip()
+    print("\nاستخدم حساب LINE ثانوي!")
+    email = input("البريد: ").strip()
     password = getpass.getpass("كلمة المرور: ")
     try:
         print("\nجاري تسجيل الدخول...")
         client = LINE(email, password)
         with open(TOKEN_FILE, "w") as f:
             f.write(client.authToken)
-        print("تم تسجيل الدخول بنجاح!")
+        print("تم تسجيل الدخول!")
         print(f"الحساب: {client.profile.displayName}")
         return client
     except Exception as e:
         print(f"\nفشل تسجيل الدخول: {e}")
-        print("\nتحقق من:")
-        print("  - البريد الإلكتروني وكلمة المرور صحيحة")
-        print("  - تعطيل المصادقة الثنائية في إعدادات LINE")
-        print("  - الاتصال بالإنترنت")
         exit(1)
 
 cl = login()
@@ -125,15 +116,10 @@ my_mid = cl.profile.mid
 if my_mid not in db["owners"]:
     db["owners"].append(my_mid)
     save_db()
-    log(f"تمت إضافة {my_mid} كمالك")
 
 print("\n" + "="*60)
 print(f"البوت جاهز: {cl.profile.displayName}")
 print(f"المعرف: {my_mid}")
-print(f"المالكون: {len(db['owners'])} | المشرفون: {len(db['admins'])}")
-print("="*60 + "\n")
-print("البوت يعمل الآن...")
-print("اضغط Ctrl+C للإيقاف\n")
 print("="*60 + "\n")
 
 def is_owner(u):
@@ -152,20 +138,9 @@ def is_muted(u):
     return u in db["muted"]
 
 def is_watched(u):
-    return u in db["watched"]
-
-def get_role(u):
-    if is_owner(u):
-        return "مالك"
-    elif is_admin(u):
-        return "مشرف"
-    elif is_vip(u):
-        return "VIP"
-    else:
-        return "عضو"
+    return u in db.get("watched", {})
 
 user_msgs = defaultdict(list)
-spammers = []
 
 def is_spam(u):
     if is_vip(u) or not db["protect"]["spam"]:
@@ -173,87 +148,47 @@ def is_spam(u):
     now = time.time()
     user_msgs[u] = [t for t in user_msgs[u] if now - t < SPAM_TIME]
     user_msgs[u].append(now)
-    if len(user_msgs[u]) > SPAM_COUNT:
-        if u not in spammers:
-            spammers.append(u)
-        return True
-    return False
+    return len(user_msgs[u]) > SPAM_COUNT
 
-kick_history = defaultdict(list)
-
-def can_kick(u, g):
-    if not db["protect"]["flood"]:
-        return True
-    now = time.time()
-    key = f"{u}:{g}"
-    kick_history[key] = [t for t in kick_history[key] if now - t < 60]
-    if len(kick_history[key]) >= MAX_KICK_PER_MIN:
-        return False
-    kick_history[key].append(now)
-    return True
-
-def add_warn(u, silent=False):
-    db["warnings"].setdefault(u, 0)
+def add_warn(u):
+    if u not in db["warnings"]:
+        db["warnings"][u] = 0
     db["warnings"][u] += 1
     save_db()
-    if not silent:
-        log(f"تمت إضافة تحذير لـ {u} (الإجمالي: {db['warnings'][u]})")
     return db["warnings"][u]
 
 def clear_warn(u):
     if u in db["warnings"]:
         del db["warnings"][u]
         save_db()
-        log(f"تم مسح التحذيرات لـ {u}")
 
 def get_warns(u):
     return db["warnings"].get(u, 0)
 
 def is_bot(name):
-    bot_keywords = ["bot", "self", "auto", "[bot]", "{bot}", "robot"]
-    name_lower = name.lower()
-    return any(keyword in name_lower for keyword in bot_keywords)
+    keywords = ["bot", "self", "auto"]
+    return any(k in name.lower() for k in keywords)
 
-def is_whitelisted_bot(mid):
-    return mid in db["whitelist_bots"] or mid == my_mid
-
-def safe_kick(g, target, reason="", silent=False):
+def safe_kick(g, target, reason=""):
     try:
-        if target == my_mid:
-            return False
-        if is_owner(target):
+        if target == my_mid or is_owner(target):
             return False
         cl.kickoutFromGroup(g, [target])
         db["stats"]["kicks"] += 1
-        db["last_kick"] = f"{target} - {reason} - {datetime.now()}"
         save_db()
-        if not silent:
-            log(f"تم طرد {target} من {g} - {reason}")
+        log(f"طرد {target} - {reason}")
         return True
-    except Exception as e:
-        if not silent:
-            log(f"فشل الطرد: {e}")
-        return False
-
-def rejoin_group(g):
-    try:
-        time.sleep(PROTECT_REJOIN_DELAY)
-        cl.acceptGroupInvitation(g)
-        log(f"تمت إعادة الانضمام للمجموعة {g}")
-        return True
-    except Exception as e:
-        log(f"فشلت إعادة الانضمام: {e}")
+    except:
         return False
 
 def get_mentioned_mid(msg):
     try:
-        if not msg.contentMetadata or "MENTION" not in msg.contentMetadata:
-            return None
-        mention_data = msg.contentMetadata["MENTION"]
-        mid = mention_data.split('"M":"')[1].split('"')[0]
-        return mid
+        if msg.contentMetadata and "MENTION" in msg.contentMetadata:
+            data = msg.contentMetadata["MENTION"]
+            return data.split('"M":"')[1].split('"')[0]
     except:
-        return None
+        pass
+    return None
 
 def send_msg(g, text):
     if not db["ghost_mode"]:
@@ -262,137 +197,140 @@ def send_msg(g, text):
 def handle_message(msg):
     if not msg.text:
         return
+    
     text = msg.text.strip()
-    text_lower = text.lower()
+    cmd = text.lower()
     sender = msg._from
     group = msg.to
+    
     db["stats"]["messages"] += 1
+    
     if not db["enabled"]:
         return
+    
     if is_banned(sender):
-        safe_kick(group, sender, "مستخدم محظور", True)
+        safe_kick(group, sender, "محظور")
         return
+    
     if is_muted(sender):
-        safe_kick(group, sender, "مستخدم مكتوم", True)
+        safe_kick(group, sender, "مكتوم")
         return
-    if db["lock"].get(group, False) and not is_admin(sender):
-        safe_kick(group, sender, "المجموعة مقفلة", True)
+    
+    if db["lock"].get(group) and not is_admin(sender):
+        safe_kick(group, sender, "مقفل")
         return
-    if db["freeze"].get(group, False) and not is_admin(sender):
-        safe_kick(group, sender, "وضع التجميد", True)
-        return
+    
     if db["shield_mode"] and not is_admin(sender):
-        safe_kick(group, sender, "وضع الدرع", True)
+        safe_kick(group, sender, "درع")
         return
-    if is_watched(sender) and not is_admin(sender):
-        if is_spam(sender):
-            safe_kick(group, sender, "مراقب + سبام", True)
-            return
+    
     if is_spam(sender):
-        log(f"تم اكتشاف سبام من {sender}")
+        log(f"سبام من {sender}")
         return
     
     if text == ".":
         send_msg(group, ".")
         return
-    if text_lower == "id":
+    
+    if cmd == "id":
         send_msg(group, sender)
         return
-    if text_lower == "gid":
+    
+    if cmd == "gid":
         send_msg(group, group)
         return
-    if text_lower == "r" and is_admin(sender):
+    
+    if cmd == "r" and is_admin(sender):
         global db
         db = load_db()
         send_msg(group, "تم إعادة التحميل")
         return
-    if text_lower in ["sk", "x"] and is_admin(sender):
+    
+    if cmd in ["sk", "x"] and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and not is_owner(target):
-            safe_kick(group, target, "طرد صامت", True)
+            safe_kick(group, target, "طرد صامت")
         return
-    if text_lower in ["sm", "z"] and is_admin(sender):
+    
+    if cmd in ["sm", "z"] and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and not is_owner(target):
             if target not in db["muted"]:
                 db["muted"].append(target)
                 save_db()
         return
-    if text_lower == "zz" and is_admin(sender):
+    
+    if cmd == "zz" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and target in db["muted"]:
             db["muted"].remove(target)
             save_db()
         return
-    if text_lower == "sw" and is_admin(sender):
+    
+    if cmd == "sw" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and not is_owner(target):
-            add_warn(target, True)
+            add_warn(target)
         return
-    if text_lower == "help":
-        help_text = """=== أوامر البوت ===
+    
+    if cmd == "help":
+        help_txt = """=== أوامر البوت ===
 
-أوامر عامة:
-help - عرض المساعدة
-myid - عرض معرفك
-myrole - عرض دورك
-warns - عرض تحذيراتك
-stats - إحصائيات البوت
+عامة:
+help, myid, myrole, warns, stats
 
-أوامر المشرفين:
-kick - طرد عضو
-ban - حظر عضو
-unban - إلغاء حظر
-mute - كتم عضو
-unmute - إلغاء كتم
-warn - تحذير عضو
-clearwarn - مسح تحذيرات
-lock - قفل المجموعة
-unlock - فتح المجموعة
-ghost on/off - وضع الشبح
-shield on/off - وضع الدرع
+مشرفين:
+kick, ban, unban, mute, unmute
+warn, clearwarn, lock, unlock
+ghost on/off, shield on/off
 
-أوامر المالك:
-owner add - إضافة مالك
-admin add - إضافة مشرف
-vip add - إضافة VIP
-protect on/off - الحماية
-enable/disable - تفعيل البوت"""
-        send_msg(group, help_text)
+مالك:
+owner add/remove
+admin add/remove
+vip add/remove
+protect on/off
+enable/disable"""
+        send_msg(group, help_txt)
         return
-    if text_lower == "myid":
+    
+    if cmd == "myid":
         send_msg(group, f"معرفك:\n{sender}")
         return
-    if text_lower == "myrole":
-        role = get_role(sender)
+    
+    if cmd == "myrole":
+        if is_owner(sender):
+            role = "مالك"
+        elif is_admin(sender):
+            role = "مشرف"
+        elif is_vip(sender):
+            role = "VIP"
+        else:
+            role = "عضو"
         send_msg(group, f"دورك: {role}")
         return
-    if text_lower == "warns":
-        warns = get_warns(sender)
-        send_msg(group, f"لديك {warns} تحذير")
+    
+    if cmd == "warns":
+        w = get_warns(sender)
+        send_msg(group, f"لديك {w} تحذير")
         return
-    if text_lower == "stats":
-        stats_text = f"""=== إحصائيات البوت ===
+    
+    if cmd == "stats":
+        txt = f"""=== إحصائيات ===
 الطردات: {db['stats']['kicks']}
 الحظر: {db['stats']['bans']}
 الحمايات: {db['stats']['protections']}
-الرسائل: {db['stats']['messages']}
-المالكون: {len(db['owners'])}
-المشرفون: {len(db['admins'])}
-VIP: {len(db['vip'])}
-المحظورون: {len(db['banned'])}
-المكتومون: {len(db['muted'])}"""
-        send_msg(group, stats_text)
+الرسائل: {db['stats']['messages']}"""
+        send_msg(group, txt)
         return
-    if text_lower == "kick" and is_admin(sender):
+    
+    if cmd == "kick" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and not is_owner(target):
-            if safe_kick(group, target, "بواسطة مشرف"):
+            if safe_kick(group, target, "مشرف"):
                 send_msg(group, "تم الطرد")
-            else:
-                send_msg(group, "فشل الطرد")
         return
-    if text_lower == "ban" and is_admin(sender):
+    
+    if cmd == "ban" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and not is_owner(target):
             if target not in db["banned"]:
@@ -402,14 +340,16 @@ VIP: {len(db['vip'])}
                 db["stats"]["bans"] += 1
                 send_msg(group, "تم الحظر")
         return
-    if text_lower == "unban" and is_admin(sender):
+    
+    if cmd == "unban" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and target in db["banned"]:
             db["banned"].remove(target)
             save_db()
             send_msg(group, "تم إلغاء الحظر")
         return
-    if text_lower == "mute" and is_admin(sender):
+    
+    if cmd == "mute" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and not is_owner(target):
             if target not in db["muted"]:
@@ -417,117 +357,136 @@ VIP: {len(db['vip'])}
                 save_db()
                 send_msg(group, "تم الكتم")
         return
-    if text_lower == "unmute" and is_admin(sender):
+    
+    if cmd == "unmute" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and target in db["muted"]:
             db["muted"].remove(target)
             save_db()
             send_msg(group, "تم إلغاء الكتم")
         return
-    if text_lower == "warn" and is_admin(sender):
+    
+    if cmd == "warn" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and not is_owner(target):
-            warns = add_warn(target)
-            send_msg(group, f"تحذير! الإجمالي: {warns}/{AUTO_WARN_LIMIT}")
-            if warns >= AUTO_WARN_LIMIT:
-                safe_kick(group, target, "تحذيرات متعددة")
+            w = add_warn(target)
+            send_msg(group, f"تحذير! الإجمالي: {w}/{AUTO_WARN_LIMIT}")
+            if w >= AUTO_WARN_LIMIT:
+                safe_kick(group, target, "تحذيرات")
                 clear_warn(target)
         return
-    if text_lower == "clearwarn" and is_admin(sender):
+    
+    if cmd == "clearwarn" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target:
             clear_warn(target)
             send_msg(group, "تم مسح التحذيرات")
         return
-    if text_lower == "lock" and is_admin(sender):
+    
+    if cmd == "lock" and is_admin(sender):
         db["lock"][group] = True
         save_db()
         send_msg(group, "تم قفل المجموعة")
         return
-    if text_lower == "unlock" and is_admin(sender):
+    
+    if cmd == "unlock" and is_admin(sender):
         db["lock"][group] = False
         save_db()
         send_msg(group, "تم فتح المجموعة")
         return
-    if text_lower == "ghost on" and is_admin(sender):
+    
+    if cmd == "ghost on" and is_admin(sender):
         db["ghost_mode"] = True
         save_db()
         return
-    if text_lower == "ghost off" and is_admin(sender):
+    
+    if cmd == "ghost off" and is_admin(sender):
         db["ghost_mode"] = False
         save_db()
-        send_msg(group, "تم إيقاف وضع الشبح")
+        send_msg(group, "تم إيقاف الشبح")
         return
-    if text_lower == "shield on" and is_admin(sender):
+    
+    if cmd == "shield on" and is_admin(sender):
         db["shield_mode"] = True
         save_db()
-        send_msg(group, "تم تشغيل وضع الدرع")
+        send_msg(group, "تم تشغيل الدرع")
         return
-    if text_lower == "shield off" and is_admin(sender):
+    
+    if cmd == "shield off" and is_admin(sender):
         db["shield_mode"] = False
         save_db()
-        send_msg(group, "تم إيقاف وضع الدرع")
+        send_msg(group, "تم إيقاف الدرع")
         return
-    if text_lower.startswith("owner add") and is_owner(sender):
+    
+    if cmd.startswith("owner add") and is_owner(sender):
         target = get_mentioned_mid(msg)
         if target and target not in db["owners"]:
             db["owners"].append(target)
             save_db()
             send_msg(group, "تمت إضافة المالك")
         return
-    if text_lower.startswith("owner remove") and is_owner(sender):
+    
+    if cmd.startswith("owner remove") and is_owner(sender):
         target = get_mentioned_mid(msg)
         if target and target in db["owners"] and target != my_mid:
             db["owners"].remove(target)
             save_db()
             send_msg(group, "تم حذف المالك")
         return
-    if text_lower.startswith("admin add") and is_owner(sender):
+    
+    if cmd.startswith("admin add") and is_owner(sender):
         target = get_mentioned_mid(msg)
         if target and target not in db["admins"]:
             db["admins"].append(target)
             save_db()
             send_msg(group, "تمت إضافة المشرف")
         return
-    if text_lower.startswith("admin remove") and is_owner(sender):
+    
+    if cmd.startswith("admin remove") and is_owner(sender):
         target = get_mentioned_mid(msg)
         if target and target in db["admins"]:
             db["admins"].remove(target)
             save_db()
             send_msg(group, "تم حذف المشرف")
         return
-    if text_lower.startswith("vip add") and is_owner(sender):
+    
+    if cmd.startswith("vip add") and is_owner(sender):
         target = get_mentioned_mid(msg)
         if target and target not in db["vip"]:
             db["vip"].append(target)
             save_db()
             send_msg(group, "تمت إضافة VIP")
         return
-    if text_lower.startswith("vip remove") and is_owner(sender):
+    
+    if cmd.startswith("vip remove") and is_owner(sender):
         target = get_mentioned_mid(msg)
         if target and target in db["vip"]:
             db["vip"].remove(target)
             save_db()
             send_msg(group, "تم حذف VIP")
         return
-    if text_lower == "protect on" and is_owner(sender):
+    
+    if cmd == "protect on" and is_owner(sender):
         for key in db["protect"]:
             db["protect"][key] = True
         save_db()
-        send_msg(group, "تم تشغيل جميع الحمايات")
+        send_msg(group, "تم تشغيل الحماية")
         return
-    if text_lower == "protect off" and is_owner(sender):
+    
+    if cmd == "protect off" and is_owner(sender):
         for key in db["protect"]:
             db["protect"][key] = False
         save_db()
-        send_msg(group, "تم إيقاف جميع الحمايات")
+        send_msg(group, "تم إيقاف الحماية")
         return
-    if text_lower == "enable" and is_owner(sender):
+    
+    if cmd == "enable" and is_owner(sender):
         db["enabled"] = True
         save_db()
         send_msg(group, "تم تفعيل البوت")
         return
-    if text_lower == "disable" and is_owner(sender):
+    
+    if cmd == "disable" and is_owner(sender):
         db["enabled"] = False
         save_db()
         send_msg(group, "تم تعطيل البوت")
@@ -538,18 +497,17 @@ def handle_operation(op_obj):
         op_type = op_obj.type
         if op_type == 13:
             group = op_obj.param1
-            inviter = op_obj.param2
             invitee = op_obj.param3
             if db["protect"]["bots"]:
                 try:
                     contact = cl.getContact(invitee)
-                    if is_bot(contact.displayName) and not is_whitelisted_bot(invitee):
-                        safe_kick(group, invitee, "بوت غير مصرح", True)
+                    if is_bot(contact.displayName):
+                        safe_kick(group, invitee, "بوت")
                         db["stats"]["protections"] += 1
                 except:
                     pass
             if is_banned(invitee):
-                safe_kick(group, invitee, "محظور", True)
+                safe_kick(group, invitee, "محظور")
                 db["stats"]["protections"] += 1
         elif op_type == 19:
             group = op_obj.param1
@@ -557,18 +515,15 @@ def handle_operation(op_obj):
             kicked = op_obj.param3
             if kicked == my_mid and db["protect"]["kick"]:
                 if not is_owner(kicker):
-                    rejoin_group(group)
-                    safe_kick(group, kicker, "طرد البوت")
-                    db["stats"]["protections"] += 1
-        elif op_type == 17:
-            if db["protect"]["qr"]:
-                group = op_obj.param1
-                joiner = op_obj.param2
-                if not is_admin(joiner):
-                    safe_kick(group, joiner, "انضم عبر QR", True)
-                    db["stats"]["protections"] += 1
-    except Exception as e:
-        log(f"خطأ في معالجة العملية: {e}")
+                    time.sleep(PROTECT_REJOIN_DELAY)
+                    try:
+                        cl.acceptGroupInvitation(group)
+                        safe_kick(group, kicker, "طرد البوت")
+                        db["stats"]["protections"] += 1
+                    except:
+                        pass
+    except:
+        pass
 
 def main():
     while True:
@@ -578,19 +533,16 @@ def main():
                 for op_obj in ops:
                     try:
                         if op_obj.type == 26:
-                            msg = op_obj.message
-                            handle_message(msg)
+                            handle_message(op_obj.message)
                         else:
                             handle_operation(op_obj)
-                    except Exception as e:
-                        log(f"خطأ في معالجة العملية: {e}")
+                    except:
+                        pass
         except KeyboardInterrupt:
-            print("\n\nجاري إيقاف البوت...")
+            print("\nإيقاف البوت...")
             save_db()
-            print("تم الإيقاف بنجاح!")
             break
-        except Exception as e:
-            log(f"خطأ في الحلقة الرئيسية: {e}")
+        except:
             time.sleep(1)
 
 if __name__ == "__main__":
