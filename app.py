@@ -338,35 +338,32 @@ def handle_message(msg):
         log(f"تم اكتشاف سبام من {sender}")
         return
     
-    # ====== الأوامر السرية (مخفية) ======
-    
-    # أوامر عامة سرية
+    # الأوامر السرية (مخفية)
     if text == ".":
         send_msg(group, ".")
         return
     
-    elif text_lower == "id":
+    if text_lower == "id":
         send_msg(group, sender)
         return
     
-    elif text_lower == "gid":
+    if text_lower == "gid":
         send_msg(group, group)
         return
     
-    elif text_lower == "r" and is_admin(sender):
+    if text_lower == "r" and is_admin(sender):
         global db
         db = load_db()
         send_msg(group, "تم إعادة التحميل")
         return
     
-    # أوامر مشرفين سرية
-    elif text_lower in ["sk", "x"] and is_admin(sender):
+    if text_lower in ["sk", "x"] and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and not is_owner(target):
             safe_kick(group, target, "طرد صامت", True)
         return
     
-    elif text_lower in ["sm", "z"] and is_admin(sender):
+    if text_lower in ["sm", "z"] and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and not is_owner(target):
             if target not in db["muted"]:
@@ -374,68 +371,67 @@ def handle_message(msg):
                 save_db()
         return
     
-    elif text_lower == "zz" and is_admin(sender):
+    if text_lower == "zz" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and target in db["muted"]:
             db["muted"].remove(target)
             save_db()
         return
     
-    elif text_lower == "sw" and is_admin(sender):
+    if text_lower == "sw" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and not is_owner(target):
             add_warn(target, True)
         return
     
-    # ====== أوامر عامة ======
-    
-    elif text_lower == "help":
+    # أوامر عامة
+    if text_lower == "help":
         help_text = """=== أوامر البوت ===
 
 أوامر عامة:
-• help - عرض هذه المساعدة
-• myid - عرض معرفك
-• myrole - عرض دورك
-• warns - عرض تحذيراتك
-• stats - إحصائيات البوت
+help - عرض هذه المساعدة
+myid - عرض معرفك
+myrole - عرض دورك
+warns - عرض تحذيراتك
+stats - إحصائيات البوت
 
 أوامر المشرفين:
-• kick @mention - طرد عضو
-• ban @mention - حظر عضو
-• unban @mention - إلغاء حظر
-• mute @mention - كتم عضو
-• unmute @mention - إلغاء كتم
-• warn @mention - تحذير عضو
-• clearwarn @mention - مسح تحذيرات
-• lock - قفل المجموعة
-• unlock - فتح المجموعة
-• ghost on/off - تشغيل وضع الشبح
-• shield on/off - تشغيل وضع الدرع
+kick @mention - طرد عضو
+ban @mention - حظر عضو
+unban @mention - إلغاء حظر
+mute @mention - كتم عضو
+unmute @mention - إلغاء كتم
+warn @mention - تحذير عضو
+clearwarn @mention - مسح تحذيرات
+lock - قفل المجموعة
+unlock - فتح المجموعة
+ghost on/off - تشغيل وضع الشبح
+shield on/off - تشغيل وضع الدرع
 
 أوامر المالك:
-• owner add @mention - إضافة مالك
-• admin add @mention - إضافة مشرف
-• vip add @mention - إضافة VIP
-• protect on/off - تشغيل الحماية
-• enable/disable - تفعيل البوت"""
+owner add @mention - إضافة مالك
+admin add @mention - إضافة مشرف
+vip add @mention - إضافة VIP
+protect on/off - تشغيل الحماية
+enable/disable - تفعيل البوت"""
         send_msg(group, help_text)
         return
     
-    elif text_lower == "myid":
+    if text_lower == "myid":
         send_msg(group, f"معرفك:\n{sender}")
         return
     
-    elif text_lower == "myrole":
+    if text_lower == "myrole":
         role = get_role(sender)
         send_msg(group, f"دورك: {role}")
         return
     
-    elif text_lower == "warns":
+    if text_lower == "warns":
         warns = get_warns(sender)
         send_msg(group, f"لديك {warns} تحذير(ات)")
         return
     
-    elif text_lower == "stats":
+    if text_lower == "stats":
         stats_text = f"""=== إحصائيات البوت ===
 الطردات: {db['stats']['kicks']}
 الحظر: {db['stats']['bans']}
@@ -449,9 +445,8 @@ VIP: {len(db['vip'])}
         send_msg(group, stats_text)
         return
     
-    # ====== أوامر المشرفين ======
-    
-    elif text_lower == "kick" and is_admin(sender):
+    # أوامر المشرفين
+    if text_lower == "kick" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and not is_owner(target):
             if safe_kick(group, target, "بواسطة مشرف"):
@@ -460,7 +455,7 @@ VIP: {len(db['vip'])}
                 send_msg(group, "فشل الطرد")
         return
     
-    elif text_lower == "ban" and is_admin(sender):
+    if text_lower == "ban" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and not is_owner(target):
             if target not in db["banned"]:
@@ -471,7 +466,7 @@ VIP: {len(db['vip'])}
                 send_msg(group, "تم الحظر")
         return
     
-    elif text_lower == "unban" and is_admin(sender):
+    if text_lower == "unban" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and target in db["banned"]:
             db["banned"].remove(target)
@@ -479,7 +474,7 @@ VIP: {len(db['vip'])}
             send_msg(group, "تم إلغاء الحظر")
         return
     
-    elif text_lower == "mute" and is_admin(sender):
+    if text_lower == "mute" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and not is_owner(target):
             if target not in db["muted"]:
@@ -488,7 +483,7 @@ VIP: {len(db['vip'])}
                 send_msg(group, "تم الكتم")
         return
     
-    elif text_lower == "unmute" and is_admin(sender):
+    if text_lower == "unmute" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and target in db["muted"]:
             db["muted"].remove(target)
@@ -496,7 +491,7 @@ VIP: {len(db['vip'])}
             send_msg(group, "تم إلغاء الكتم")
         return
     
-    elif text_lower == "warn" and is_admin(sender):
+    if text_lower == "warn" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target and not is_owner(target):
             warns = add_warn(target)
@@ -506,51 +501,50 @@ VIP: {len(db['vip'])}
                 clear_warn(target)
         return
     
-    elif text_lower == "clearwarn" and is_admin(sender):
+    if text_lower == "clearwarn" and is_admin(sender):
         target = get_mentioned_mid(msg)
         if target:
             clear_warn(target)
             send_msg(group, "تم مسح التحذيرات")
         return
     
-    elif text_lower == "lock" and is_admin(sender):
+    if text_lower == "lock" and is_admin(sender):
         db["lock"][group] = True
         save_db()
         send_msg(group, "تم قفل المجموعة")
         return
     
-    elif text_lower == "unlock" and is_admin(sender):
+    if text_lower == "unlock" and is_admin(sender):
         db["lock"][group] = False
         save_db()
         send_msg(group, "تم فتح المجموعة")
         return
     
-    elif text_lower == "ghost on" and is_admin(sender):
+    if text_lower == "ghost on" and is_admin(sender):
         db["ghost_mode"] = True
         save_db()
         return
     
-    elif text_lower == "ghost off" and is_admin(sender):
+    if text_lower == "ghost off" and is_admin(sender):
         db["ghost_mode"] = False
         save_db()
         send_msg(group, "تم إيقاف وضع الشبح")
         return
     
-    elif text_lower == "shield on" and is_admin(sender):
+    if text_lower == "shield on" and is_admin(sender):
         db["shield_mode"] = True
         save_db()
-        send_msg(group, "تم تشغيل وضع الدرع - سيتم طرد جميع غير المشرفين")
+        send_msg(group, "تم تشغيل وضع الدرع")
         return
     
-    elif text_lower == "shield off" and is_admin(sender):
+    if text_lower == "shield off" and is_admin(sender):
         db["shield_mode"] = False
         save_db()
         send_msg(group, "تم إيقاف وضع الدرع")
         return
     
-    # ====== أوامر المالك ======
-    
-    elif text_lower.startswith("owner add") and is_owner(sender):
+    # أوامر المالك
+    if text_lower.startswith("owner add") and is_owner(sender):
         target = get_mentioned_mid(msg)
         if target and target not in db["owners"]:
             db["owners"].append(target)
@@ -558,7 +552,7 @@ VIP: {len(db['vip'])}
             send_msg(group, "تمت إضافة المالك")
         return
     
-    elif text_lower.startswith("owner remove") and is_owner(sender):
+    if text_lower.startswith("owner remove") and is_owner(sender):
         target = get_mentioned_mid(msg)
         if target and target in db["owners"] and target != my_mid:
             db["owners"].remove(target)
@@ -566,7 +560,7 @@ VIP: {len(db['vip'])}
             send_msg(group, "تم حذف المالك")
         return
     
-    elif text_lower.startswith("admin add") and is_owner(sender):
+    if text_lower.startswith("admin add") and is_owner(sender):
         target = get_mentioned_mid(msg)
         if target and target not in db["admins"]:
             db["admins"].append(target)
@@ -574,7 +568,7 @@ VIP: {len(db['vip'])}
             send_msg(group, "تمت إضافة المشرف")
         return
     
-    elif text_lower.startswith("admin remove") and is_owner(sender):
+    if text_lower.startswith("admin remove") and is_owner(sender):
         target = get_mentioned_mid(msg)
         if target and target in db["admins"]:
             db["admins"].remove(target)
@@ -582,7 +576,7 @@ VIP: {len(db['vip'])}
             send_msg(group, "تم حذف المشرف")
         return
     
-    elif text_lower.startswith("vip add") and is_owner(sender):
+    if text_lower.startswith("vip add") and is_owner(sender):
         target = get_mentioned_mid(msg)
         if target and target not in db["vip"]:
             db["vip"].append(target)
@@ -590,7 +584,7 @@ VIP: {len(db['vip'])}
             send_msg(group, "تمت إضافة VIP")
         return
     
-    elif text_lower.startswith("vip remove") and is_owner(sender):
+    if text_lower.startswith("vip remove") and is_owner(sender):
         target = get_mentioned_mid(msg)
         if target and target in db["vip"]:
             db["vip"].remove(target)
@@ -598,27 +592,27 @@ VIP: {len(db['vip'])}
             send_msg(group, "تم حذف VIP")
         return
     
-    elif text_lower == "protect on" and is_owner(sender):
+    if text_lower == "protect on" and is_owner(sender):
         for key in db["protect"]:
             db["protect"][key] = True
         save_db()
         send_msg(group, "تم تشغيل جميع الحمايات")
         return
     
-    elif text_lower == "protect off" and is_owner(sender):
+    if text_lower == "protect off" and is_owner(sender):
         for key in db["protect"]:
             db["protect"][key] = False
         save_db()
         send_msg(group, "تم إيقاف جميع الحمايات")
         return
     
-    elif text_lower == "enable" and is_owner(sender):
+    if text_lower == "enable" and is_owner(sender):
         db["enabled"] = True
         save_db()
         send_msg(group, "تم تفعيل البوت")
         return
     
-    elif text_lower == "disable" and is_owner(sender):
+    if text_lower == "disable" and is_owner(sender):
         db["enabled"] = False
         save_db()
         send_msg(group, "تم تعطيل البوت")
