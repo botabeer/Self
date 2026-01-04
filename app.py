@@ -1,12 +1,25 @@
 # =========================================
-# LINE Protection Bot - All In One (app.py)
+# LINE Protection Bot - app.py (Stable)
 # Arabic messages | English commands
 # =========================================
 
-import json, time, os, getpass, re, hashlib
+import json
+import time
+import os
+import getpass
+import re
+import hashlib
 from datetime import datetime
 from collections import defaultdict
-from linepy import LINE, OEPoll
+
+# ===== Safe import linepy =====
+try:
+    from linepy import LINE, OEPoll
+except ImportError:
+    print("❌ مكتبة linepy غير مثبتة")
+    print("📌 ثبتها بالأمر:")
+    print("pip install git+https://github.com/dyseo/linepy.git")
+    exit(1)
 
 # ============ CONFIG ============
 
@@ -17,13 +30,14 @@ LOG_FILE = "logs.txt"
 AUTO_WARN_LIMIT = 3
 SPAM_TIME = 2
 SPAM_COUNT = 5
-MASSKICK_BATCH = 5
+
+MASSKICK_BATCH = 4
 MASSKICK_DELAY = 2
 
 LINK_REGEX = re.compile(r"(line\.me|chat\.line)", re.I)
 
-# كلمة سر الأوامر السرية (غيرها!)
-SECRET_KEY = "CHANGE_ME"
+# كلمة سر الأوامر السرية (غيرها)
+SECRET_KEY = "CHANGE_ME_NOW"
 
 # ============ DEFAULT DB ============
 
@@ -33,16 +47,15 @@ DEFAULT_DB = {
     "vip": [],
     "banned": [],
     "warnings": {},
-    "muted": {},           # mid: until
+    "muted": {},          # mid: unmute_time
     "lock": {},
-    "watch": {},           # mid: strikes
+    "watch": {},          # mid: strikes
     "whitelist_bots": [],
     "ghost": False,
     "shield": False,
     "freeze": False,
     "protect": {
         "kick": True,
-        "invite": True,
         "link": True,
         "spam": True,
         "bots": True
@@ -56,22 +69,22 @@ DEFAULT_DB = {
     "enabled": True
 }
 
-# ============ DB ============
+# ============ DB FUNCTIONS ============
 
 def load_db():
     if not os.path.exists(DB_FILE):
-        with open(DB_FILE, "w") as f:
-            json.dump(DEFAULT_DB, f, indent=2)
+        with open(DB_FILE, "w", encoding="utf-8") as f:
+            json.dump(DEFAULT_DB, f, indent=2, ensure_ascii=False)
         return DEFAULT_DB.copy()
-    with open(DB_FILE) as f:
+    with open(DB_FILE, encoding="utf-8") as f:
         db = json.load(f)
     for k in DEFAULT_DB:
         db.setdefault(k, DEFAULT_DB[k])
     return db
 
 def save_db():
-    with open(DB_FILE, "w") as f:
-        json.dump(db, f, indent=2)
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(db, f, indent=2, ensure_ascii=False)
 
 def log(txt):
     with open(LOG_FILE, "a", encoding="utf-8") as f:
@@ -87,10 +100,12 @@ def login():
             return LINE(open(TOKEN_FILE).read().strip())
         except:
             os.remove(TOKEN_FILE)
-    email = input("Email: ")
+
+    email = input("Email: ").strip()
     password = getpass.getpass("Password: ")
     cl = LINE(email, password)
-    open(TOKEN_FILE, "w").write(cl.authToken)
+    with open(TOKEN_FILE, "w") as f:
+        f.write(cl.authToken)
     return cl
 
 cl = login()
@@ -101,7 +116,7 @@ if my_mid not in db["owners"]:
     db["owners"].append(my_mid)
     save_db()
 
-print("✅ البوت شغال")
+print("✅ تم تشغيل البوت بنجاح")
 
 # ============ HELPERS ============
 
@@ -130,11 +145,10 @@ def mentions(msg):
     except:
         return []
 
-def hash_cmd(cmd):
-    return hashlib.sha256((cmd + SECRET_KEY).encode()).hexdigest()
-
-def is_secret(cmd):
-    return cmd.startswith("#")
+def add_warn(u):
+    db["warnings"][u] = db["warnings"].get(u, 0) + 1
+    save_db()
+    return db["warnings"][u]
 
 def safe_kick(g, u, silent=False):
     try:
@@ -144,16 +158,11 @@ def safe_kick(g, u, silent=False):
             save_db()
             log(f"KICK {u} in {g}")
             if not silent:
-                send(g, "تم الطرد")
+                send(g, "تم طرد العضو")
     except:
         pass
 
-def add_warn(u):
-    db["warnings"][u] = db["warnings"].get(u, 0) + 1
-    save_db()
-    return db["warnings"][u]
-
-# ============ SPAM ============
+# ============ SPAM SYSTEM ============
 
 user_msgs = defaultdict(list)
 
@@ -186,7 +195,7 @@ def masskick(group, members):
         except:
             pass
 
-# ============ MESSAGE ============
+# ============ MESSAGE HANDLER ============
 
 def handle_msg(msg):
     if not msg.text:
@@ -235,20 +244,12 @@ def handle_msg(msg):
     if s in db["watch"] and not is_admin(s):
         db["watch"][s] += 1
         if db["watch"][s] >= 2:
-            safe_kick(g, s, True)
             db["banned"].append(s)
-            save_db()
+            safe_kick(g, s, True)
+        save_db()
         return
 
     m = mentions(msg)
-
-    # ===== SECRET COMMANDS (Encrypted) =====
-    if is_secret(cmd):
-        hashed = hash_cmd(cmd[1:])
-        if hashed == hash_cmd("panic") and is_owner(s):
-            db["shield"] = db["freeze"] = True
-            save_db()
-        return
 
     # ===== GENERAL =====
 
@@ -261,15 +262,13 @@ time - الوقت
 ping - فحص البوت
 stats - الإحصائيات
 
-👮 Admin:
+👮 أوامر الأدمن
 kick / mute / unmute
 warn / clearwarn
 lock / unlock
-tagall
-cleanbots
 watch / unwatch
 
-👑 Owner:
+👑 أوامر المالك
 addadmin / deladmin
 ban / unban
 masskick
@@ -285,11 +284,11 @@ ghost / unghost
         send(g, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     elif cmd == "ping":
-        t = time.time()
-        send(g, f"Pong {round(time.time()-t,3)}s")
+        start = time.time()
+        send(g, f"Pong {round(time.time()-start,3)}s")
 
     elif cmd == "stats":
-        send(g, str(db["stats"]))
+        send(g, json.dumps(db["stats"], ensure_ascii=False))
 
     # ===== ADMIN =====
 
@@ -329,18 +328,13 @@ ghost / unghost
         for u in m:
             db["watch"][u] = 0
         save_db()
-        send(g, "تمت المراقبة")
+        send(g, "تمت إضافة العضو للمراقبة")
 
     elif cmd == "unwatch" and is_admin(s):
         for u in m:
             db["watch"].pop(u, None)
         save_db()
         send(g, "تم إيقاف المراقبة")
-
-    elif cmd == "cleanbots" and is_admin(s):
-        group = cl.getGroup(g)
-        bots = [m.mid for m in group.members if m.mid not in db["whitelist_bots"] and m.mid != my_mid and m.mid.startswith("u") is False]
-        masskick(g, bots)
 
     # ===== OWNER =====
 
@@ -378,6 +372,7 @@ ghost / unghost
         db["shield"] = True
         db["freeze"] = True
         save_db()
+        send(g, "تم تفعيل وضع الطوارئ")
 
     elif cmd == "ghost" and is_owner(s):
         db["ghost"] = True
@@ -386,15 +381,18 @@ ghost / unghost
     elif cmd == "unghost" and is_owner(s):
         db["ghost"] = False
         save_db()
+        send(g, "تم إلغاء الوضع الشبحي")
 
-# ============ OPS ============
+# ============ OPS HANDLER ============
 
 def handle_op(o):
     try:
+        # Anti-kick protection
         if o.type == 19 and db["protect"]["kick"]:
             kicker = o.param2
             target = o.param3
             group = o.param1
+
             if target == my_mid:
                 cl.acceptGroupInvitation(group)
                 safe_kick(group, kicker, True)
@@ -403,7 +401,7 @@ def handle_op(o):
     except:
         pass
 
-# ============ LOOP ============
+# ============ MAIN LOOP ============
 
 def main():
     while True:
