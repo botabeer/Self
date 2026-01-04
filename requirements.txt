@@ -1,13 +1,5 @@
 requests==2.31.0
-Flask==2.3.3
-aiohttp==3.9.0
-thrift==0.16.0
-rsa==4.9
-humanfriendly==10.0
-argparse
-six
-pytz
 urllib3==1.26.18
 certifi==2023.7.22
 charset-normalizer==3.3.2
-idna==3.4
+idna==3.6
