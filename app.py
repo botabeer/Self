@@ -152,6 +152,7 @@ def handle_msg(msg):
     s = msg._from
     g = msg.to
     db["stats"]["messages"] += 1
+    
     if not db["enabled"]:
         return
     if is_banned(s):
@@ -169,6 +170,8 @@ def handle_msg(msg):
     if is_spam(s):
         return
     
+    t = get_mentioned(msg)
+    
     if text == ".":
         send(g, ".")
     elif cmd == "id":
@@ -180,21 +183,17 @@ def handle_msg(msg):
         db = load_db()
         send(g, "تم")
     elif cmd in ["sk", "x"] and is_admin(s):
-        t = get_mentioned(msg)
         if t:
             safe_kick(g, t)
     elif cmd in ["sm", "z"] and is_admin(s):
-        t = get_mentioned(msg)
         if t and t not in db["muted"]:
             db["muted"].append(t)
             save_db()
     elif cmd == "zz" and is_admin(s):
-        t = get_mentioned(msg)
         if t and t in db["muted"]:
             db["muted"].remove(t)
             save_db()
     elif cmd == "sw" and is_admin(s):
-        t = get_mentioned(msg)
         if t:
             add_warn(t)
     elif cmd == "help":
@@ -206,12 +205,10 @@ def handle_msg(msg):
     elif cmd == "stats":
         send(g, f"طردات: {db['stats']['kicks']}, حظر: {db['stats']['bans']}")
     elif cmd == "kick" and is_admin(s):
-        t = get_mentioned(msg)
         if t:
             safe_kick(g, t)
             send(g, "تم")
     elif cmd == "ban" and is_admin(s):
-        t = get_mentioned(msg)
         if t and t not in db["banned"]:
             db["banned"].append(t)
             save_db()
@@ -219,25 +216,21 @@ def handle_msg(msg):
             db["stats"]["bans"] += 1
             send(g, "تم")
     elif cmd == "unban" and is_admin(s):
-        t = get_mentioned(msg)
         if t and t in db["banned"]:
             db["banned"].remove(t)
             save_db()
             send(g, "تم")
     elif cmd == "mute" and is_admin(s):
-        t = get_mentioned(msg)
         if t and t not in db["muted"]:
             db["muted"].append(t)
             save_db()
             send(g, "تم")
     elif cmd == "unmute" and is_admin(s):
-        t = get_mentioned(msg)
         if t and t in db["muted"]:
             db["muted"].remove(t)
             save_db()
             send(g, "تم")
     elif cmd == "warn" and is_admin(s):
-        t = get_mentioned(msg)
         if t:
             w = add_warn(t)
             send(g, f"تحذير: {w}/{AUTO_WARN_LIMIT}")
@@ -245,7 +238,6 @@ def handle_msg(msg):
                 safe_kick(g, t)
                 clear_warn(t)
     elif cmd == "clearwarn" and is_admin(s):
-        t = get_mentioned(msg)
         if t:
             clear_warn(t)
             send(g, "تم")
@@ -273,25 +265,21 @@ def handle_msg(msg):
         save_db()
         send(g, "تم")
     elif cmd.startswith("admin add") and is_owner(s):
-        t = get_mentioned(msg)
         if t and t not in db["admins"]:
             db["admins"].append(t)
             save_db()
             send(g, "تم")
     elif cmd.startswith("admin remove") and is_owner(s):
-        t = get_mentioned(msg)
         if t and t in db["admins"]:
             db["admins"].remove(t)
             save_db()
             send(g, "تم")
     elif cmd.startswith("vip add") and is_owner(s):
-        t = get_mentioned(msg)
         if t and t not in db["vip"]:
             db["vip"].append(t)
             save_db()
             send(g, "تم")
     elif cmd.startswith("vip remove") and is_owner(s):
-        t = get_mentioned(msg)
         if t and t in db["vip"]:
             db["vip"].remove(t)
             save_db()
