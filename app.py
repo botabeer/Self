@@ -147,26 +147,33 @@ def send(g, text):
 def handle_msg(msg):
     if not msg.text:
         return
+    
     text = msg.text.strip()
     cmd = text.lower()
     s = msg._from
     g = msg.to
+    
     db["stats"]["messages"] += 1
     
     if not db["enabled"]:
         return
+    
     if is_banned(s):
         safe_kick(g, s)
         return
+    
     if is_muted(s):
         safe_kick(g, s)
         return
+    
     if db["lock"].get(g) and not is_admin(s):
         safe_kick(g, s)
         return
+    
     if db["shield_mode"] and not is_admin(s):
         safe_kick(g, s)
         return
+    
     if is_spam(s):
         return
     
