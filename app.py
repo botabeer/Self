@@ -1,664 +1,390 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-🛡️ بوت حماية LINE - نسخة عربية
-⚠️ استخدم حساب ثانوي فقط
-📝 Self-Bot للحماية والإدارة
-"""
+import json, time, os, getpass, threading
+from datetime import datetime, timedelta
+from collections import defaultdict
 
-import json
-import time
-import os
-from datetime import datetime
-
-# ========== فحص المكتبات ==========
-print("🔍 جاري فحص المكتبات...")
-try:
-    from linepy import LINE, OEPoll
-    print("✅ linepy جاهز")
-except ImportError:
-    print("\n❌ خطأ: مكتبة linepy غير مثبتة!\n")
-    print("📥 قم بتشغيل الأمر التالي:")
-    print("   pip install git+https://github.com/dyseo/linepy.git\n")
-    input("اضغط Enter للخروج...")
-    exit(1)
-
-# ========== البيانات ==========
-class Database:
-    def __init__(self):
-        self.file = 'bot_data.json'
-        self.load()
-    
-    def load(self):
-        """تحميل البيانات"""
-        default = {
-            'owners': [],      # المالكين
-            'admins': [],      # الأدمنز
-            'banned': [],      # المحظورين
-            'protect': {
-                'kick': True,     # حماية الطرد
-                'invite': True,   # حماية الدعوة
-                'qr': True,       # حماية الرابط
-                'cancel': True    # حماية الإلغاء
-            },
-            'auto': {
-                'add': True,      # قبول الإضافة تلقائياً
-                'join': True,     # الانضمام تلقائياً
-                'read': True      # قراءة الرسائل تلقائياً
-            }
-        }
-        
-        if os.path.exists(self.file):
-            try:
-                with open(self.file, 'r', encoding='utf-8') as f:
-                    self.data = json.load(f)
-                # إضافة المفاتيح المفقودة
-                for key in default:
-                    if key not in self.data:
-                        self.data[key] = default[key]
-            except:
-                self.data = default
-        else:
-            self.data = default
-        
-        self.save()
-    
-    def save(self):
-        """حفظ البيانات"""
-        try:
-            with open(self.file, 'w', encoding='utf-8') as f:
-                json.dump(self.data, f, ensure_ascii=False, indent=2)
-            return True
-        except Exception as e:
-            print(f"❌ خطأ في الحفظ: {e}")
-            return False
-    
-    def is_owner(self, mid):
-        return mid in self.data['owners']
-    
-    def is_admin(self, mid):
-        return mid in self.data['owners'] or mid in self.data['admins']
-    
-    def is_banned(self, mid):
-        return mid in self.data['banned']
-
-db = Database()
-
-# ========== التسجيل ==========
-def clear():
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-def banner():
-    print("="*60)
-    print("🛡️  بوت حماية LINE - نسخة عربية")
-    print("="*60)
-    print("⚠️  استخدم حساب ثانوي - ليس الحساب الرئيسي!")
-    print("="*60)
-
-def login():
-    """تسجيل الدخول"""
-    clear()
-    banner()
-    
-    token_file = 'token.txt'
-    
-    # محاولة Token المحفوظ
-    if os.path.exists(token_file):
-        try:
-            with open(token_file, 'r') as f:
-                token = f.read().strip()
-            
-            print("\n🔐 تسجيل الدخول بـ Token...")
-            client = LINE(token)
-            print(f"✅ مرحباً: {client.profile.displayName}")
-            return client
-        except:
-            print("❌ Token منتهي، سجل دخول جديد")
-            os.remove(token_file)
-    
-    # تسجيل جديد
-    print("\n📧 تسجيل الدخول")
-    print("-"*60)
-    
-    while True:
-        email = input("\n📧 Email: ").strip()
-        password = input("🔑 Password: ").strip()
-        
-        if not email or not password:
-            print("❌ أدخل Email و Password!")
-            continue
-        
-        try:
-            print("\n⏳ جاري التسجيل...")
-            client = LINE(email, password)
-            
-            # حفظ Token
-            with open(token_file, 'w') as f:
-                f.write(client.authToken)
-            
-            print(f"\n✅ نجح التسجيل!")
-            print(f"👤 الاسم: {client.profile.displayName}")
-            print(f"💾 Token محفوظ في: {token_file}")
-            return client
-            
-        except Exception as e:
-            print(f"\n❌ فشل: {e}")
-            print("\n💡 تأكد من:")
-            print("  • Email/Password صحيح")
-            print("  • التحقق بخطوتين معطّل")
-            
-            if input("\nحاول مرة أخرى؟ (y/n): ").lower() != 'y':
-                exit(0)
-
-# تسجيل الدخول
-client = login()
-oepoll = OEPoll(client)
-my_mid = client.profile.mid
-
-# إضافة نفسك كـ Owner
-if my_mid not in db.data['owners']:
-    db.data['owners'].append(my_mid)
-    db.save()
-
-clear()
-banner()
-print(f"\n✅ البوت جاهز!")
-print(f"👤 {client.profile.displayName}")
-print(f"🆔 {my_mid}")
-print(f"👑 Owners: {len(db.data['owners'])}")
-print(f"👮 Admins: {len(db.data['admins'])}")
-print(f"🚫 Banned: {len(db.data['banned'])}")
 print("\n" + "="*60)
-
-# ========== قائمة الأوامر ==========
-def help_msg():
-    return """╔═══════════════════════════
-║ 🛡️ أوامر البوت
-║
-║ 📋 عامة:
-║ ├ الأوامر - هذه القائمة
-║ ├ معلوماتي - بياناتك
-║ ├ السرعة - سرعة البوت
-║ ├ الحالة - حالة الحماية
-║ ├ الوقت - التاريخ والوقت
-║
-║ 🛡️ الحماية (مالك):
-║ ├ تفعيل_الحماية
-║ ├ ايقاف_الحماية
-║ ├ تفعيل_حماية_الطرد
-║ ├ ايقاف_حماية_الطرد
-║ ├ تفعيل_حماية_الدعوة
-║ ├ ايقاف_حماية_الدعوة
-║ ├ تفعيل_حماية_الرابط
-║ ├ ايقاف_حماية_الرابط
-║
-║ 👥 المجموعة (أدمن):
-║ ├ معلومات_المجموعة
-║ ├ الاعضاء - قائمة الأعضاء
-║ ├ طرد @منشن
-║ ├ طرد_الكل (مالك فقط)
-║ ├ دعوة @منشن
-║ ├ فتح_الرابط
-║ ├ اغلاق_الرابط
-║ ├ جلب_الرابط
-║ ├ مغادرة
-║
-║ 👮 الصلاحيات (مالك):
-║ ├ اضافة_ادمن @منشن
-║ ├ حذف_ادمن @منشن
-║ ├ قائمة_الادمنز
-║ ├ حظر @منشن
-║ ├ الغاء_حظر @منشن
-║ ├ قائمة_المحظورين
-║
-╚═══════════════════════════"""
-
-# ========== معالج الأحداث ==========
-def handle_op(op):
-    """معالجة الأحداث"""
-    try:
-        # [5] إضافة صديق
-        if op.type == 5:
-            if db.data['auto']['add']:
-                try:
-                    contact = client.getContact(op.param1)
-                    client.sendMessage(op.param1,
-                        f"👋 أهلاً {contact.displayName}!\n"
-                        "شكراً لإضافتك 💚\n"
-                        "أرسل: الأوامر")
-                    print(f"✅ إضافة: {contact.displayName}")
-                except Exception as e:
-                    print(f"❌ خطأ إضافة: {e}")
-        
-        # [13] دعوة لمجموعة
-        elif op.type == 13:
-            inviter = op.param2
-            invited = op.param3
-            group_id = op.param1
-            
-            # حماية الدعوات
-            if db.data['protect']['invite']:
-                if not db.is_admin(inviter):
-                    print(f"⚠️ دعوة غير مصرح من: {inviter}")
-                    try:
-                        client.cancelGroupInvitation(group_id, [invited])
-                        client.kickoutFromGroup(group_id, [inviter])
-                        
-                        if inviter not in db.data['banned']:
-                            db.data['banned'].append(inviter)
-                            db.save()
-                        
-                        print(f"✅ طرد المخالف")
-                    except Exception as e:
-                        print(f"❌ فشل: {e}")
-            
-            # قبول الدعوة
-            if db.data['auto']['join']:
-                try:
-                    client.acceptGroupInvitation(group_id)
-                    group = client.getGroup(group_id)
-                    client.sendMessage(group_id,
-                        f"✅ انضممت: {group.name}\n"
-                        "🛡️ الحماية مفعّلة\n"
-                        "📝 أرسل: الأوامر")
-                    print(f"✅ انضمام: {group.name}")
-                except:
-                    pass
-        
-        # [19] طرد من مجموعة
-        elif op.type == 19:
-            kicker = op.param2
-            kicked = op.param3
-            group_id = op.param1
-            
-            if db.data['protect']['kick']:
-                # حماية البوت والأدمنز
-                if kicked == my_mid or db.is_admin(kicked):
-                    if not db.is_admin(kicker):
-                        print(f"🚨 محاولة طرد من: {kicker}")
-                        try:
-                            # إعادة دعوة
-                            client.inviteIntoGroup(group_id, [kicked])
-                            # طرد المعتدي
-                            client.kickoutFromGroup(group_id, [kicker])
-                            client.sendMessage(group_id,
-                                "🛡️ تم اكتشاف محاولة طرد!\n"
-                                "✅ تمت معالجتها")
-                            
-                            if kicker not in db.data['banned']:
-                                db.data['banned'].append(kicker)
-                                db.save()
-                            
-                            print(f"✅ طرد المعتدي")
-                        except Exception as e:
-                            print(f"❌ فشل: {e}")
-        
-        # [11] تغيير رابط
-        elif op.type == 11:
-            changer = op.param2
-            group_id = op.param1
-            
-            if db.data['protect']['qr']:
-                if not db.is_admin(changer):
-                    print(f"⚠️ محاولة فتح رابط")
-                    try:
-                        group = client.getGroup(group_id)
-                        group.preventedJoinByTicket = True
-                        client.updateGroup(group)
-                        client.kickoutFromGroup(group_id, [changer])
-                    except:
-                        pass
-        
-        # [32] إلغاء دعوة
-        elif op.type == 32:
-            if db.data['protect']['cancel']:
-                canceller = op.param2
-                group_id = op.param1
-                
-                if not db.is_admin(canceller):
-                    try:
-                        client.kickoutFromGroup(group_id, [canceller])
-                    except:
-                        pass
-        
-        # [26] رسالة
-        elif op.type == 26:
-            msg = op.message
-            if msg.contentType == 0 and msg.text:
-                handle_msg(msg)
-        
-        # قراءة تلقائية
-        if db.data['auto']['read'] and op.type == 26:
-            try:
-                client.sendChatChecked(op.param1, op.param2)
-            except:
-                pass
-    
-    except Exception as e:
-        print(f"❌ خطأ في op {op.type}: {e}")
-
-def handle_msg(msg):
-    """معالجة الرسائل"""
-    text = msg.text.strip()
-    sender = msg._from
-    to = msg.to if msg.toType == 2 else sender
-    is_group = msg.toType == 2
-    
-    # منع المحظورين
-    if db.is_banned(sender):
-        return
-    
-    try:
-        # ===== الأوامر العامة =====
-        if text == 'الأوامر':
-            client.sendMessage(to, help_msg())
-        
-        elif text == 'معلوماتي':
-            contact = client.getContact(sender)
-            role = "👑 مالك" if db.is_owner(sender) else \
-                   "👮 أدمن" if db.is_admin(sender) else "👤 عضو"
-            
-            info = f"""╔═══════════════════
-║ 📱 معلوماتك
-║ 👤 {contact.displayName}
-║ 🆔 {sender}
-║ 🏆 {role}
-╚═══════════════════"""
-            client.sendMessage(to, info)
-        
-        elif text == 'السرعة':
-            start = time.time()
-            client.sendMessage(to, "⏱️ جاري القياس...")
-            elapsed = time.time() - start
-            client.sendMessage(to, f"⚡ السرعة: {elapsed:.2f}s")
-        
-        elif text == 'الحالة':
-            p = db.data['protect']
-            a = db.data['auto']
-            
-            status = f"""╔═══════════════════
-║ 📊 حالة البوت
-║
-║ 🛡️ الحماية:
-║ ├ الطرد: {'✅' if p['kick'] else '❌'}
-║ ├ الدعوة: {'✅' if p['invite'] else '❌'}
-║ ├ الرابط: {'✅' if p['qr'] else '❌'}
-║ └ الإلغاء: {'✅' if p['cancel'] else '❌'}
-║
-║ ⚙️ التلقائي:
-║ ├ الإضافة: {'✅' if a['add'] else '❌'}
-║ ├ الانضمام: {'✅' if a['join'] else '❌'}
-║ └ القراءة: {'✅' if a['read'] else '❌'}
-║
-║ 👥 الإحصائيات:
-║ ├ 👑 Owners: {len(db.data['owners'])}
-║ ├ 👮 Admins: {len(db.data['admins'])}
-║ └ 🚫 Banned: {len(db.data['banned'])}
-╚═══════════════════"""
-            client.sendMessage(to, status)
-        
-        elif text == 'الوقت':
-            now = datetime.now()
-            client.sendMessage(to, 
-                f"🕐 التاريخ والوقت:\n"
-                f"{now.strftime('%Y-%m-%d')}\n"
-                f"{now.strftime('%H:%M:%S')}")
-        
-        # ===== الحماية =====
-        elif text == 'تفعيل_الحماية' and db.is_owner(sender):
-            for key in db.data['protect']:
-                db.data['protect'][key] = True
-            db.save()
-            client.sendMessage(to, "✅ تم تفعيل كل الحماية")
-        
-        elif text == 'ايقاف_الحماية' and db.is_owner(sender):
-            for key in db.data['protect']:
-                db.data['protect'][key] = False
-            db.save()
-            client.sendMessage(to, "❌ تم إيقاف كل الحماية")
-        
-        elif text == 'تفعيل_حماية_الطرد' and db.is_owner(sender):
-            db.data['protect']['kick'] = True
-            db.save()
-            client.sendMessage(to, "✅ حماية الطرد مفعلة")
-        
-        elif text == 'ايقاف_حماية_الطرد' and db.is_owner(sender):
-            db.data['protect']['kick'] = False
-            db.save()
-            client.sendMessage(to, "❌ حماية الطرد معطلة")
-        
-        elif text == 'تفعيل_حماية_الدعوة' and db.is_owner(sender):
-            db.data['protect']['invite'] = True
-            db.save()
-            client.sendMessage(to, "✅ حماية الدعوة مفعلة")
-        
-        elif text == 'ايقاف_حماية_الدعوة' and db.is_owner(sender):
-            db.data['protect']['invite'] = False
-            db.save()
-            client.sendMessage(to, "❌ حماية الدعوة معطلة")
-        
-        elif text == 'تفعيل_حماية_الرابط' and db.is_owner(sender):
-            db.data['protect']['qr'] = True
-            db.save()
-            client.sendMessage(to, "✅ حماية الرابط مفعلة")
-        
-        elif text == 'ايقاف_حماية_الرابط' and db.is_owner(sender):
-            db.data['protect']['qr'] = False
-            db.save()
-            client.sendMessage(to, "❌ حماية الرابط معطلة")
-        
-        # ===== المجموعة =====
-        elif text == 'معلومات_المجموعة' and is_group:
-            group = client.getGroup(to)
-            creator = group.creator.displayName if group.creator else "غير معروف"
-            qr = "مفتوح 🔓" if not group.preventedJoinByTicket else "مغلق 🔒"
-            
-            info = f"""╔═══════════════════
-║ 📊 معلومات المجموعة
-║
-║ 📝 {group.name}
-║ 👤 المنشئ: {creator}
-║ 👥 الأعضاء: {len(group.members)}
-║ 🔗 الرابط: {qr}
-╚═══════════════════"""
-            client.sendMessage(to, info)
-        
-        elif text == 'الاعضاء' and is_group:
-            group = client.getGroup(to)
-            msg_text = "╔═══ 👥 الأعضاء ═══\n"
-            
-            for i, m in enumerate(group.members[:30], 1):
-                msg_text += f"║ {i}. {m.displayName}\n"
-            
-            if len(group.members) > 30:
-                msg_text += f"║ و {len(group.members) - 30} آخرين\n"
-            
-            msg_text += f"╚═══ المجموع: {len(group.members)} ═══"
-            client.sendMessage(to, msg_text)
-        
-        elif text.startswith('طرد ') and db.is_admin(sender) and is_group:
-            if 'MENTION' in msg.contentMetadata:
-                import ast
-                mentions = ast.literal_eval(msg.contentMetadata['MENTION'])
-                kicked = 0
-                
-                for m in mentions['MENTIONEES']:
-                    target = m['M']
-                    if not db.is_admin(target):
-                        try:
-                            client.kickoutFromGroup(to, [target])
-                            kicked += 1
-                        except:
-                            pass
-                
-                if kicked > 0:
-                    client.sendMessage(to, f"✅ تم طرد {kicked} عضو")
-            else:
-                client.sendMessage(to, "❌ منشن العضو!")
-        
-        elif text == 'طرد_الكل' and db.is_owner(sender) and is_group:
-            group = client.getGroup(to)
-            kicked = 0
-            
-            client.sendMessage(to, "⏳ جاري طرد الجميع...")
-            
-            for m in group.members:
-                if not db.is_admin(m.mid) and m.mid != my_mid:
-                    try:
-                        client.kickoutFromGroup(to, [m.mid])
-                        kicked += 1
-                        time.sleep(0.5)
-                    except:
-                        pass
-            
-            client.sendMessage(to, f"✅ تم طرد {kicked} عضو")
-        
-        # ===== الصلاحيات =====
-        elif text.startswith('اضافة_ادمن') and db.is_owner(sender):
-            if 'MENTION' in msg.contentMetadata:
-                import ast
-                mentions = ast.literal_eval(msg.contentMetadata['MENTION'])
-                
-                for m in mentions['MENTIONEES']:
-                    target = m['M']
-                    if target not in db.data['admins']:
-                        db.data['admins'].append(target)
-                
-                db.save()
-                client.sendMessage(to, "✅ تمت الإضافة")
-            else:
-                client.sendMessage(to, "❌ منشن العضو!")
-        
-        elif text.startswith('حذف_ادمن') and db.is_owner(sender):
-            if 'MENTION' in msg.contentMetadata:
-                import ast
-                mentions = ast.literal_eval(msg.contentMetadata['MENTION'])
-                
-                for m in mentions['MENTIONEES']:
-                    target = m['M']
-                    if target in db.data['admins']:
-                        db.data['admins'].remove(target)
-                
-                db.save()
-                client.sendMessage(to, "✅ تم الحذف")
-            else:
-                client.sendMessage(to, "❌ منشن العضو!")
-        
-        elif text == 'قائمة_الادمنز' and db.is_admin(sender):
-            if db.data['admins']:
-                msg_text = "╔═══ 👮 الأدمنز ═══\n"
-                for i, admin_mid in enumerate(db.data['admins'], 1):
-                    try:
-                        contact = client.getContact(admin_mid)
-                        msg_text += f"║ {i}. {contact.displayName}\n"
-                    except:
-                        msg_text += f"║ {i}. {admin_mid[:15]}...\n"
-                msg_text += "╚═══════════════════"
-                client.sendMessage(to, msg_text)
-            else:
-                client.sendMessage(to, "❌ لا يوجد أدمنز")
-        
-        elif text.startswith('حظر ') and db.is_owner(sender):
-            if 'MENTION' in msg.contentMetadata:
-                import ast
-                mentions = ast.literal_eval(msg.contentMetadata['MENTION'])
-                
-                for m in mentions['MENTIONEES']:
-                    target = m['M']
-                    if not db.is_owner(target) and target not in db.data['banned']:
-                        db.data['banned'].append(target)
-                
-                db.save()
-                client.sendMessage(to, "✅ تم الحظر")
-            else:
-                client.sendMessage(to, "❌ منشن العضو!")
-        
-        elif text.startswith('الغاء_حظر ') and db.is_owner(sender):
-            if 'MENTION' in msg.contentMetadata:
-                import ast
-                mentions = ast.literal_eval(msg.contentMetadata['MENTION'])
-                
-                for m in mentions['MENTIONEES']:
-                    target = m['M']
-                    if target in db.data['banned']:
-                        db.data['banned'].remove(target)
-                
-                db.save()
-                client.sendMessage(to, "✅ تم إلغاء الحظر")
-            else:
-                client.sendMessage(to, "❌ منشن العضو!")
-        
-        elif text == 'قائمة_المحظورين' and db.is_admin(sender):
-            if db.data['banned']:
-                msg_text = "╔═══ 🚫 المحظورين ═══\n"
-                for i, banned_mid in enumerate(db.data['banned'][:20], 1):
-                    msg_text += f"║ {i}. {banned_mid[:15]}...\n"
-                msg_text += f"╚═══ المجموع: {len(db.data['banned'])} ═══"
-                client.sendMessage(to, msg_text)
-            else:
-                client.sendMessage(to, "✅ لا يوجد محظورين")
-        
-        # ===== إدارة الرابط =====
-        elif text == 'فتح_الرابط' and db.is_admin(sender) and is_group:
-            group = client.getGroup(to)
-            group.preventedJoinByTicket = False
-            client.updateGroup(group)
-            client.sendMessage(to, "🔓 تم فتح الرابط")
-        
-        elif text == 'اغلاق_الرابط' and db.is_admin(sender) and is_group:
-            group = client.getGroup(to)
-            group.preventedJoinByTicket = True
-            client.updateGroup(group)
-            client.sendMessage(to, "🔒 تم إغلاق الرابط")
-        
-        elif text == 'جلب_الرابط' and db.is_admin(sender) and is_group:
-            try:
-                ticket = client.reissueGroupTicket(to)
-                client.sendMessage(to, 
-                    f"🔗 رابط المجموعة:\n"
-                    f"https://line.me/R/ti/g/{ticket}")
-            except:
-                client.sendMessage(to, 
-                    "❌ الرابط مغلق!\n"
-                    "استخدم: فتح_الرابط")
-        
-        elif text == 'مغادرة' and db.is_admin(sender) and is_group:
-            client.sendMessage(to, "👋 وداعاً!")
-            time.sleep(1)
-            client.leaveGroup(to)
-    
-    except Exception as e:
-        print(f"❌ خطأ في الرسالة: {e}")
-
-# ========== الحلقة الرئيسية ==========
-print("\n🚀 البوت يعمل الآن...")
-print("💡 اضغط Ctrl+C للإيقاف\n")
+print("LINE Protection Bot - Professional Edition")
 print("="*60)
 
-last_save = time.time()
-
+# ================== Check Libraries ==================
 try:
-    while True:
-        try:
-            ops = oepoll.fetchOperations()
-            
-            for op in ops:
-                handle_op(op)
-            
-            # حفظ كل 5 دقائق
-            if time.time() - last_save > 300:
-                db.save()
-                last_save = time.time()
-                print(f"💾 [{datetime.now().strftime('%H:%M:%S')}] حفظ تلقائي")
-        
-        except KeyboardInterrupt:
-            raise
-        except Exception as e:
-            print(f"❌ خطأ: {e}")
-            time.sleep(3)
+    from linepy import LINE, OEPoll
+    print("linepy ready")
+except ImportError:
+    print("\n✗ linepy not installed!")
+    print("\nInstall: pip install git+https://github.com/dyseo/linepy.git")
+    exit(1)
 
-except KeyboardInterrupt:
-    print("\n\n⏹️ إيقاف البوت...")
-    db.save()
-    print("💾 تم حفظ البيانات")
-    print("👋 وداعاً!")
+# ================== Configuration ==================
+DB_FILE = "db.json"
+LOG_FILE = "logs.txt"
+TOKEN_FILE = "token.txt"
+
+# Limits
+AUTO_WARN_LIMIT = 3
+SPAM_TIME = 2
+SPAM_COUNT = 5
+MAX_KICK_PER_MIN = 3
+PROTECT_REJOIN_DELAY = 2
+
+# ================== Default Database ==================
+DEFAULT_DB = {
+    "owners": [],
+    "admins": [],
+    "vip": [],
+    "banned": [],
+    "muted": [],
+    "warnings": {},
+    "lock": {},
+    "freeze": {},
+    "watched": {},
+    "ghost_mode": False,
+    "shield_mode": False,
+    "protect": {
+        "kick": True,
+        "invite": True,
+        "qr": True,
+        "bots": True,
+        "spam": True,
+        "flood": True
+    },
+    "whitelist_bots": [],
+    "kick_history": {},
+    "last_kick": "",
+    "last_ban": "",
+    "stats": {
+        "kicks": 0,
+        "bans": 0,
+        "protections": 0,
+        "messages": 0
+    },
+    "enabled": True
+}
+
+# ================== Database Functions ==================
+def load_db():
+    if not os.path.exists(DB_FILE):
+        with open(DB_FILE, "w") as f:
+            json.dump(DEFAULT_DB, f, indent=2)
+        return DEFAULT_DB.copy()
+    
+    with open(DB_FILE) as f:
+        db = json.load(f)
+    
+    for key in DEFAULT_DB:
+        if key not in db:
+            db[key] = DEFAULT_DB[key]
+    
+    return db
+
+def save_db():
+    with open(DB_FILE, "w") as f:
+        json.dump(db, f, indent=2)
+
+db = load_db()
+
+# ================== Logging ==================
+def log(text):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] {text}\n")
+
+# ================== Login ==================
+def login():
+    print("\n" + "-"*60)
+    print("Login to LINE")
+    print("-"*60)
+    
+    if os.path.exists(TOKEN_FILE):
+        try:
+            print("Attempting login with saved token...")
+            with open(TOKEN_FILE) as f:
+                token = f.read().strip()
+            client = LINE(token)
+            print("Login successful!")
+            return client
+        except:
+            print("Token invalid, removing...")
+            os.remove(TOKEN_FILE)
+    
+    print("\nUse secondary LINE account only!")
+    email = input("Email: ").strip()
+    password = getpass.getpass("Password: ")
+    
+    try:
+        print("\nLogging in...")
+        client = LINE(email, password)
+        
+        with open(TOKEN_FILE, "w") as f:
+            f.write(client.authToken)
+        
+        print("Login successful!")
+        print(f"Account: {client.profile.displayName}")
+        return client
+    except Exception as e:
+        print(f"\n✗ Login failed: {e}")
+        print("\nCheck:")
+        print("  - Email and Password correct")
+        print("  - Disable 2FA in LINE settings")
+        print("  - Internet connection")
+        exit(1)
+
+cl = login()
+op = OEPoll(cl)
+my_mid = cl.profile.mid
+
+if my_mid not in db["owners"]:
+    db["owners"].append(my_mid)
+    save_db()
+    log(f"Added {my_mid} as owner")
+
+print("\n" + "="*60)
+print(f"Bot Ready: {cl.profile.displayName}")
+print(f"ID: {my_mid}")
+print(f"Owners: {len(db['owners'])} | Admins: {len(db['admins'])}")
+print("="*60 + "\n")
+print("Bot is running...")
+print("Press Ctrl+C to stop\n")
+print("="*60 + "\n")
+
+# ================== Permission System ==================
+def is_owner(u):
+    return u in db["owners"]
+
+def is_admin(u):
+    return u in db["admins"] or is_owner(u)
+
+def is_vip(u):
+    return u in db["vip"]
+
+def is_banned(u):
+    return u in db["banned"]
+
+def is_muted(u):
+    return u in db["muted"]
+
+def is_watched(u):
+    return u in db["watched"]
+
+def get_role(u):
+    if is_owner(u):
+        return "Owner"
+    elif is_admin(u):
+        return "Admin"
+    elif is_vip(u):
+        return "VIP"
+    else:
+        return "Member"
+
+# ================== Anti-Spam System ==================
+user_msgs = defaultdict(list)
+spammers = []
+
+def is_spam(u):
+    if is_vip(u) or not db["protect"]["spam"]:
+        return False
+    
+    now = time.time()
+    user_msgs[u] = [t for t in user_msgs[u] if now - t < SPAM_TIME]
+    user_msgs[u].append(now)
+    
+    if len(user_msgs[u]) > SPAM_COUNT:
+        if u not in spammers:
+            spammers.append(u)
+        return True
+    
+    return False
+
+# ================== Anti-Flood System ==================
+kick_history = defaultdict(list)
+
+def can_kick(u, g):
+    if not db["protect"]["flood"]:
+        return True
+    
+    now = time.time()
+    key = f"{u}:{g}"
+    kick_history[key] = [t for t in kick_history[key] if now - t < 60]
+    
+    if len(kick_history[key]) >= MAX_KICK_PER_MIN:
+        return False
+    
+    kick_history[key].append(now)
+    return True
+
+# ================== Warning System ==================
+def add_warn(u, silent=False):
+    db["warnings"].setdefault(u, 0)
+    db["warnings"][u] += 1
+    save_db()
+    if not silent:
+        log(f"Warning added to {u} (total: {db['warnings'][u]})")
+    return db["warnings"][u]
+
+def clear_warn(u):
+    if u in db["warnings"]:
+        del db["warnings"][u]
+        save_db()
+        log(f"Warnings cleared for {u}")
+
+def get_warns(u):
+    return db["warnings"].get(u, 0)
+
+# ================== Bot Detection ==================
+def is_bot(name):
+    bot_keywords = ["bot", "self", "auto", "[bot]", "{bot}", "🤖", "robot"]
+    name_lower = name.lower()
+    return any(keyword in name_lower for keyword in bot_keywords)
+
+def is_whitelisted_bot(mid):
+    return mid in db["whitelist_bots"] or mid == my_mid
+
+# ================== Protection Functions ==================
+def safe_kick(g, target, reason="", silent=False):
+    try:
+        if target == my_mid:
+            return False
+        
+        if is_owner(target):
+            return False
+        
+        cl.kickoutFromGroup(g, [target])
+        db["stats"]["kicks"] += 1
+        db["last_kick"] = f"{target} - {reason} - {datetime.now()}"
+        save_db()
+        if not silent:
+            log(f"Kicked {target} from {g} - {reason}")
+        return True
+    except Exception as e:
+        if not silent:
+            log(f"Kick failed: {e}")
+        return False
+
+def rejoin_group(g):
+    try:
+        time.sleep(PROTECT_REJOIN_DELAY)
+        cl.acceptGroupInvitation(g)
+        log(f"Rejoined group {g}")
+        return True
+    except Exception as e:
+        log(f"Rejoin failed: {e}")
+        return False
+
+# ================== Mention Parser ==================
+def get_mentioned_mid(msg):
+    try:
+        if not msg.contentMetadata or "MENTION" not in msg.contentMetadata:
+            return None
+        
+        mention_data = msg.contentMetadata["MENTION"]
+        mid = mention_data.split('"M":"')[1].split('"')[0]
+        return mid
+    except:
+        return None
+
+# ================== Send Message (Ghost Mode) ==================
+def send_msg(g, text):
+    if not db["ghost_mode"]:
+        cl.sendMessage(g, text)
+
+# ================== Command Handler ==================
+def handle_message(msg):
+    if not msg.text:
+        return
+    
+    text = msg.text.strip()
+    text_lower = text.lower()
+    sender = msg._from
+    group = msg.to
+    
+    db["stats"]["messages"] += 1
+    
+    if not db["enabled"]:
+        return
+    
+    # Auto Ban
+    if is_banned(sender):
+        safe_kick(group, sender, "banned user", True)
+        return
+    
+    # Auto Kick Muted
+    if is_muted(sender):
+        safe_kick(group, sender, "muted user", True)
+        return
+    
+    # Group Lock
+    if db["lock"].get(group, False) and not is_admin(sender):
+        safe_kick(group, sender, "group locked", True)
+        return
+    
+    # Freeze Mode
+    if db["freeze"].get(group, False) and not is_admin(sender):
+        safe_kick(group, sender, "freeze mode", True)
+        return
+    
+    # Shield Mode
+    if db["shield_mode"] and not is_admin(sender):
+        safe_kick(group, sender, "shield mode", True)
+        return
+    
+    # Watch Mode
+    if is_watched(sender) and not is_admin(sender):
+        if is_spam(sender):
+            safe_kick(group, sender, "watched + spam", True)
+            return
+    
+    # Anti-Spam
+    if is_spam(sender):
+        log(f"Spam detected from {sender}")
+        return
+    
+    # ================== Secret Commands (Hidden) ==================
+    
+    # General Secret
+    if text == ".":
+        send_msg(group, ".")
+        return
+    
+    elif text_lower == "id":
+        send_msg(group, sender)
+        return
+    
+    elif text_lower == "gid":
+        send_msg(group, group)
+        return
+    
+    elif text_lower == "r" and is_admin(sender):
+        global db
+        db = load_db()
+        send_msg(group, "Reloaded")
+        return
+    
+    # Admin Secret
+    elif text_lower in ["sk", "x"] and is_admin(sender):
+        target = get_mentioned_mid(msg)
+        if target and not is_owner(target):
+            safe_kick(group, target, "silent kick", True)
+        return
+    
+    elif text_lower in ["sm", "z"] and is_admin(sender):
+        target = get_mentioned_mid(msg)
+        if target and not is_owner(target):
+            if target not in db["muted"]:
+                db["muted"].append(target)
+                save_db()
+        return
+    
+    elif text_lower == "zz" and is_admin(sender):
+        target = get_mentioned_mid(msg)
+        if target and target in db["muted"]:
+            db["muted"].remove(target)
+            save_db()
+        return
+    
+    elif text_lower == "sw" and is_admin(sender):
+        target = get_mentioned_mid(msg)
+        if target and not is_owner(target):
+            add_warn(target, True)
+        return
+    
+    elif text_lower
