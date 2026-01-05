@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import json
 import time
 import os
@@ -6,23 +9,20 @@ from datetime import datetime
 from collections import defaultdict
 
 try:
-    from CHRLINE import CHRLINE
+    from linepy import LINE
 except ImportError:
-    print("❌ خطأ: مكتبة CHRLINE غير مثبتة!")
-    print("\nشغّل هذا الأمر:")
-    print("pip install CHRLINE")
+    print("❌ خطأ: مكتبة linepy غير مثبتة!")
+    print("\nشغّل: pip install linepy")
     exit(1)
 
 # ============ CONFIG ============
 
 DB_FILE = "db.json"
-TOKEN_FILE = "token.json"
 LOG_FILE = "logs.txt"
 
 AUTO_WARN_LIMIT = 3
 SPAM_TIME = 2
 SPAM_COUNT = 5
-
 MASSKICK_BATCH = 3
 MASSKICK_DELAY = 1
 
@@ -46,8 +46,7 @@ DEFAULT_DB = {
         "kick": True,
         "link": True,
         "spam": True,
-        "invite": True,
-        "qr": True
+        "invite": True
     },
     "stats": {
         "messages": 0,
@@ -84,93 +83,41 @@ db = load_db()
 
 # ============ LOGIN ============
 
-def login():
-    print("\n" + "="*60)
-    print("🤖 LINE Protection Bot - CHRLINE")
-    print("="*60 + "\n")
-    
-    cl = CHRLINE()
-    
-    # محاولة تحميل token محفوظ
-    if os.path.exists(TOKEN_FILE):
-        try:
-            print("⏳ جاري استعادة الجلسة...")
-            with open(TOKEN_FILE, "r") as f:
-                token_data = json.load(f)
-            
-            cl.authToken = token_data.get("authToken")
-            cl.certificate = token_data.get("certificate")
-            
-            # اختبار الاتصال
-            profile = cl.getProfile()
-            if profile:
-                print(f"✅ تم استعادة الجلسة بنجاح!")
-                print(f"👤 الحساب: {profile.displayName}")
-                return cl
-            else:
-                print("⚠️  الجلسة منتهية، سجل دخول جديد...")
-                os.remove(TOKEN_FILE)
-        except:
-            print("⚠️  خطأ في تحميل الجلسة...")
-            if os.path.exists(TOKEN_FILE):
-                os.remove(TOKEN_FILE)
-    
-    # تسجيل دخول جديد
-    print("\n" + "="*60)
-    print("📝 تسجيل دخول جديد")
-    print("="*60)
-    
-    email = input("📧 الإيميل: ").strip()
-    password = input("🔑 الباسورد: ").strip()
-    
-    print("\n⏳ جاري تسجيل الدخول...")
-    
-    try:
-        # تسجيل الدخول
-        cl.login(email, password)
-        
-        # التحقق من PIN إذا لزم الأمر
-        if hasattr(cl, 'callback') and cl.callback:
-            print("\n📱 تم إرسال رمز التحقق إلى LINE")
-            pin = input("🔢 أدخل الكود: ").strip()
-            cl.callback(pin)
-        
-        # حفظ الجلسة
-        token_data = {
-            "authToken": cl.authToken,
-            "certificate": cl.certificate
-        }
-        with open(TOKEN_FILE, "w") as f:
-            json.dump(token_data, f)
-        
-        profile = cl.getProfile()
-        print(f"\n✅ تم تسجيل الدخول بنجاح!")
-        print(f"👤 الحساب: {profile.displayName}")
-        print(f"🆔 MID: {profile.mid}")
-        
-        return cl
-        
-    except Exception as e:
-        print(f"\n❌ فشل تسجيل الدخول: {e}")
-        print("\nتأكد من:")
-        print("1. الإيميل والباسورد صحيحين")
-        print("2. حسابك مربوط بإيميل")
-        print("3. اتصال الإنترنت شغال")
-        exit(1)
-
-cl = login()
-my_mid = cl.getProfile().mid
-
-# إضافة المستخدم كمالك
-if my_mid not in db["owners"]:
-    db["owners"].append(my_mid)
-    save_db()
-
 print("\n" + "="*60)
-print("✅ البوت جاهز ويستقبل الرسائل")
-print("="*60)
-print(f"🆔 MID: {my_mid}")
-print("⌨️  اضغط CTRL+C للإيقاف\n")
+print("🤖 LINE Protection Bot")
+print("="*60 + "\n")
+
+email = input("📧 الإيميل: ").strip()
+password = input("🔑 الباسورد: ").strip()
+
+print("\n⏳ جاري تسجيل الدخول...")
+
+try:
+    cl = LINE(email, password)
+    profile = cl.getProfile()
+    
+    print(f"\n✅ تم تسجيل الدخول بنجاح!")
+    print(f"👤 الحساب: {profile.displayName}")
+    print(f"🆔 MID: {profile.mid}")
+    
+    my_mid = profile.mid
+    
+    if my_mid not in db["owners"]:
+        db["owners"].append(my_mid)
+        save_db()
+    
+    print("\n" + "="*60)
+    print("✅ البوت جاهز ويستقبل الرسائل")
+    print("="*60)
+    print("⌨️  اضغط CTRL+C للإيقاف\n")
+    
+except Exception as e:
+    print(f"\n❌ فشل تسجيل الدخول: {e}")
+    print("\nتأكد من:")
+    print("1. الإيميل والباسورد صحيحين")
+    print("2. حسابك مربوط بإيميل")
+    print("3. اتصال الإنترنت شغال")
+    exit(1)
 
 # ============ HELPERS ============
 
@@ -203,11 +150,9 @@ def send(g, txt):
             log(f"Send error: {e}")
 
 def get_mentions(msg):
-    """استخراج mentions من الرسالة"""
     mentions = []
     try:
         if hasattr(msg, 'contentMetadata') and msg.contentMetadata:
-            # CHRLINE format
             if 'MENTION' in msg.contentMetadata:
                 mention_data = json.loads(msg.contentMetadata['MENTION'])
                 for mention in mention_data.get('MENTIONEES', []):
@@ -382,7 +327,7 @@ unshield - إلغاء الدرع
 freeze - تجميد
 unfreeze - فك تجميد
 
-💡 يمكنك استخدام . قبل الأوامر مثل: .kick""")
+💡 يمكنك استخدام . قبل الأوامر""")
 
         elif cmd == "me" or cmd == ".me":
             role = "👑 مالك" if is_owner(s) else "👮 أدمن" if is_admin(s) else "⭐ VIP" if is_vip(s) else "👤 عضو"
@@ -531,7 +476,6 @@ unfreeze - فك تجميد
         elif (cmd == "ghost" or cmd == ".ghost") and is_owner(s):
             db["ghost"] = True
             save_db()
-            # لا نرسل رسالة في وضع الشبح
 
         elif (cmd == "unghost" or cmd == ".unghost") and is_owner(s):
             db["ghost"] = False
@@ -565,9 +509,8 @@ unfreeze - فك تجميد
 
 def handle_operation(op):
     try:
-        # حماية من الدعوات
         if db["protect"]["invite"]:
-            if op.type == 13:  # NOTIFIED_INVITE_INTO_GROUP
+            if op.type == 13:
                 if not is_admin(op.param1):
                     try:
                         cl.kickoutFromGroup(op.param2, [op.param1])
@@ -576,7 +519,7 @@ def handle_operation(op):
                     except:
                         pass
             
-            elif op.type == 17:  # NOTIFIED_ACCEPT_GROUP_INVITATION
+            elif op.type == 17:
                 if db["shield"] and not is_admin(op.param1):
                     try:
                         cl.kickoutFromGroup(op.param2, [op.param1])
@@ -584,20 +527,6 @@ def handle_operation(op):
                         log(f"Shield kicked {op.param1}")
                     except:
                         pass
-        
-        # حماية من إلغاء الدعوة
-        if db["protect"]["qr"]:
-            if op.type == 19:  # NOTIFIED_UPDATE_GROUP
-                if not is_admin(op.param1):
-                    group = cl.getGroup(op.param1)
-                    if group.preventJoinByTicket:
-                        try:
-                            cl.kickoutFromGroup(op.param1, [op.param2])
-                            db["stats"]["protections"] += 1
-                            log(f"QR protection kicked {op.param2}")
-                        except:
-                            pass
-    
     except Exception as e:
         log(f"Operation handler error: {e}")
 
@@ -606,39 +535,26 @@ def handle_operation(op):
 def main():
     log("Bot started successfully")
     
-    processed_ops = set()
+    ops_history = []
     
     while True:
         try:
-            # استقبال العمليات
-            ops = cl.fetchOps(cl.revision, 50)
+            ops = cl.fetchOps(cl.getLastOpRevision(), 50)
             
             for op in ops:
-                # تجنب معالجة نفس العملية مرتين
-                op_id = f"{op.revision}_{op.type}"
-                if op_id in processed_ops:
-                    continue
-                processed_ops.add(op_id)
-                
-                # تحديث الـ revision
-                cl.revision = max(cl.revision, op.revision)
-                
-                # معالجة الرسائل
-                if op.type == 26:  # RECEIVE_MESSAGE
-                    if op.message:
-                        handle_msg(op.message)
-                
-                # معالجة العمليات الأخرى
-                else:
-                    handle_operation(op)
-                
-                # تنظيف الذاكرة
-                if len(processed_ops) > 1000:
-                    processed_ops.clear()
+                if op.revision not in ops_history:
+                    ops_history.append(op.revision)
+                    
+                    if op.type == 26:
+                        if op.message:
+                            handle_msg(op.message)
+                    else:
+                        handle_operation(op)
+                    
+                    if len(ops_history) > 500:
+                        ops_history = ops_history[-100:]
             
-            # حفظ البيانات كل فترة
             save_db()
-            
             time.sleep(0.5)
             
         except KeyboardInterrupt:
@@ -658,4 +574,3 @@ if __name__ == "__main__":
     except Exception as e:
         log(f"Fatal error: {e}")
         print(f"\n❌ خطأ كبير: {e}")
-        print("البوت سيتوقف الآن")
