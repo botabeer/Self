@@ -2,18 +2,21 @@ import json
 import time
 import os
 import re
-import getpass
-import hashlib
-import hmac
-import struct
 from datetime import datetime
 from collections import defaultdict
-import requests
+
+try:
+    from CHRLINE import CHRLINE
+except ImportError:
+    print("❌ خطأ: مكتبة CHRLINE غير مثبتة!")
+    print("\nشغّل هذا الأمر:")
+    print("pip install CHRLINE")
+    exit(1)
 
 # ============ CONFIG ============
 
 DB_FILE = "db.json"
-SESSION_FILE = "session.json"
+TOKEN_FILE = "token.json"
 LOG_FILE = "logs.txt"
 
 AUTO_WARN_LIMIT = 3
@@ -21,12 +24,9 @@ SPAM_TIME = 2
 SPAM_COUNT = 5
 
 MASSKICK_BATCH = 3
-MASSKICK_DELAY = 2
+MASSKICK_DELAY = 1
 
 LINK_REGEX = re.compile(r"(line\.me|chat\.line|t\.me|telegram\.me|wa\.me|whatsapp\.com)", re.I)
-
-LINE_HOST = "https://gd2.line.naver.jp"
-LINE_API = f"{LINE_HOST}/api/v4/TalkService.do"
 
 # ============ DEFAULT DB ============
 
@@ -39,7 +39,6 @@ DEFAULT_DB = {
     "muted": {},
     "lock": {},
     "watch": {},
-    "whitelist_bots": [],
     "ghost": False,
     "shield": False,
     "freeze": False,
@@ -47,19 +46,15 @@ DEFAULT_DB = {
         "kick": True,
         "link": True,
         "spam": True,
-        "bots": True,
         "invite": True,
-        "qr": True,
-        "cancel": True
+        "qr": True
     },
     "stats": {
         "messages": 0,
         "kicks": 0,
         "bans": 0,
         "protections": 0
-    },
-    "enabled": True,
-    "auto_join": True
+    }
 }
 
 # ============ DB FUNCTIONS ============
@@ -80,173 +75,102 @@ def save_db():
         json.dump(db, f, indent=2, ensure_ascii=False)
 
 def log(txt):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(f"[{datetime.now()}] {txt}\n")
-    print(f"[LOG] {txt}")
+        f.write(f"[{timestamp}] {txt}\n")
+    print(f"[{timestamp}] {txt}")
 
 db = load_db()
-
-# ============ LINE CLIENT ============
-
-class LineClient:
-    def __init__(self):
-        self.authToken = None
-        self.certificate = None
-        self.my_mid = None
-        self.headers = {
-            "User-Agent": "Line/13.4.1",
-            "X-Line-Application": "ANDROID\t13.4.1\tAndroid OS\t12",
-            "X-Line-Carrier": "51089, 1-0"
-        }
-    
-    def _request(self, method, params=None):
-        try:
-            headers = self.headers.copy()
-            if self.authToken:
-                headers["X-Line-Access"] = self.authToken
-            
-            payload = {"method": method}
-            if params:
-                payload["params"] = params
-            
-            response = requests.post(LINE_API, headers=headers, json=payload, timeout=10)
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                log(f"API Error {response.status_code}: {method}")
-                return {}
-        except Exception as e:
-            log(f"Request error in {method}: {e}")
-            return {}
-    
-    def login_with_email(self, email, password):
-        try:
-            print("جاري تسجيل الدخول...")
-            
-            # محاولة تسجيل الدخول البسيط
-            result = self._request("loginWithIdentityCredentialForCertificate", {
-                "identityProvider": 1,
-                "identifier": email,
-                "password": password,
-                "keepLoggedIn": True,
-                "systemName": "LineBot"
-            })
-            
-            if "authToken" in result:
-                self.authToken = result["authToken"]
-                self.certificate = result.get("certificate")
-                
-                # حفظ الجلسة
-                session_data = {
-                    "authToken": self.authToken,
-                    "certificate": self.certificate
-                }
-                with open(SESSION_FILE, "w") as f:
-                    json.dump(session_data, f)
-                
-                # الحصول على المعلومات
-                profile = self.get_profile()
-                if profile:
-                    self.my_mid = profile.get("mid")
-                    print(f"تم تسجيل الدخول بنجاح: {profile.get('displayName', 'User')}")
-                    return True
-            
-            print("فشل تسجيل الدخول - تحقق من الإيميل والباسورد")
-            return False
-            
-        except Exception as e:
-            log(f"Login error: {e}")
-            print(f"خطأ في تسجيل الدخول: {e}")
-            return False
-    
-    def load_session(self):
-        if os.path.exists(SESSION_FILE):
-            try:
-                with open(SESSION_FILE, "r") as f:
-                    session = json.load(f)
-                
-                self.authToken = session.get("authToken")
-                self.certificate = session.get("certificate")
-                
-                profile = self.get_profile()
-                if profile:
-                    self.my_mid = profile.get("mid")
-                    print(f"تم استعادة الجلسة: {profile.get('displayName', 'User')}")
-                    return True
-                else:
-                    os.remove(SESSION_FILE)
-                    return False
-            except:
-                return False
-        return False
-    
-    def get_profile(self):
-        result = self._request("getProfile")
-        return result.get("result")
-    
-    def send_message(self, to, text):
-        return self._request("sendMessage", {
-            "to": to,
-            "text": str(text)
-        })
-    
-    def kick_user(self, group_id, user_ids):
-        if isinstance(user_ids, str):
-            user_ids = [user_ids]
-        return self._request("kickoutFromGroup", {
-            "groupId": group_id,
-            "contactIds": user_ids
-        })
-    
-    def get_group(self, group_id):
-        result = self._request("getGroup", {"groupId": group_id})
-        return result.get("result", {})
-    
-    def accept_group_invitation(self, group_id):
-        return self._request("acceptGroupInvitation", {"groupId": group_id})
-    
-    def get_recent_messages(self, group_id, count=50):
-        result = self._request("getRecentMessagesV2", {
-            "messageBoxId": group_id,
-            "count": count
-        })
-        return result.get("result", [])
 
 # ============ LOGIN ============
 
 def login():
-    cl = LineClient()
+    print("\n" + "="*60)
+    print("🤖 LINE Protection Bot - CHRLINE")
+    print("="*60 + "\n")
     
-    # محاولة تحميل جلسة محفوظة
-    if cl.load_session():
+    cl = CHRLINE()
+    
+    # محاولة تحميل token محفوظ
+    if os.path.exists(TOKEN_FILE):
+        try:
+            print("⏳ جاري استعادة الجلسة...")
+            with open(TOKEN_FILE, "r") as f:
+                token_data = json.load(f)
+            
+            cl.authToken = token_data.get("authToken")
+            cl.certificate = token_data.get("certificate")
+            
+            # اختبار الاتصال
+            profile = cl.getProfile()
+            if profile:
+                print(f"✅ تم استعادة الجلسة بنجاح!")
+                print(f"👤 الحساب: {profile.displayName}")
+                return cl
+            else:
+                print("⚠️  الجلسة منتهية، سجل دخول جديد...")
+                os.remove(TOKEN_FILE)
+        except:
+            print("⚠️  خطأ في تحميل الجلسة...")
+            if os.path.exists(TOKEN_FILE):
+                os.remove(TOKEN_FILE)
+    
+    # تسجيل دخول جديد
+    print("\n" + "="*60)
+    print("📝 تسجيل دخول جديد")
+    print("="*60)
+    
+    email = input("📧 الإيميل: ").strip()
+    password = input("🔑 الباسورد: ").strip()
+    
+    print("\n⏳ جاري تسجيل الدخول...")
+    
+    try:
+        # تسجيل الدخول
+        cl.login(email, password)
+        
+        # التحقق من PIN إذا لزم الأمر
+        if hasattr(cl, 'callback') and cl.callback:
+            print("\n📱 تم إرسال رمز التحقق إلى LINE")
+            pin = input("🔢 أدخل الكود: ").strip()
+            cl.callback(pin)
+        
+        # حفظ الجلسة
+        token_data = {
+            "authToken": cl.authToken,
+            "certificate": cl.certificate
+        }
+        with open(TOKEN_FILE, "w") as f:
+            json.dump(token_data, f)
+        
+        profile = cl.getProfile()
+        print(f"\n✅ تم تسجيل الدخول بنجاح!")
+        print(f"👤 الحساب: {profile.displayName}")
+        print(f"🆔 MID: {profile.mid}")
+        
         return cl
-    
-    print("\n" + "="*50)
-    print("تسجيل الدخول إلى LINE")
-    print("="*50)
-    
-    email = input("الإيميل: ").strip()
-    password = getpass.getpass("الباسورد: ")
-    
-    if cl.login_with_email(email, password):
-        return cl
-    else:
-        print("\nفشل تسجيل الدخول!")
-        print("تأكد من:")
+        
+    except Exception as e:
+        print(f"\n❌ فشل تسجيل الدخول: {e}")
+        print("\nتأكد من:")
         print("1. الإيميل والباسورد صحيحين")
-        print("2. حسابك مربوط بإيميل (Settings > Account > Email)")
+        print("2. حسابك مربوط بإيميل")
+        print("3. اتصال الإنترنت شغال")
         exit(1)
 
 cl = login()
-my_mid = cl.my_mid
+my_mid = cl.getProfile().mid
 
+# إضافة المستخدم كمالك
 if my_mid not in db["owners"]:
     db["owners"].append(my_mid)
     save_db()
 
-print(f"\nMID: {my_mid}")
-print("البوت يعمل الآن...\n")
+print("\n" + "="*60)
+print("✅ البوت جاهز ويستقبل الرسائل")
+print("="*60)
+print(f"🆔 MID: {my_mid}")
+print("⌨️  اضغط CTRL+C للإيقاف\n")
 
 # ============ HELPERS ============
 
@@ -274,18 +198,20 @@ def is_muted(u):
 def send(g, txt):
     if not db["ghost"]:
         try:
-            cl.send_message(g, txt)
-        except:
-            pass
+            cl.sendMessage(g, str(txt))
+        except Exception as e:
+            log(f"Send error: {e}")
 
-def get_mentions(text):
+def get_mentions(msg):
+    """استخراج mentions من الرسالة"""
     mentions = []
     try:
-        parts = text.split("@")
-        for part in parts[1:]:
-            words = part.split()
-            if words and len(words[0]) == 33:
-                mentions.append(words[0])
+        if hasattr(msg, 'contentMetadata') and msg.contentMetadata:
+            # CHRLINE format
+            if 'MENTION' in msg.contentMetadata:
+                mention_data = json.loads(msg.contentMetadata['MENTION'])
+                for mention in mention_data.get('MENTIONEES', []):
+                    mentions.append(mention.get('M'))
     except:
         pass
     return mentions
@@ -298,14 +224,14 @@ def add_warn(u):
 def safe_kick(g, u, silent=False):
     try:
         if u != my_mid and not is_owner(u):
-            cl.kick_user(g, u)
+            cl.kickoutFromGroup(g, [u])
             db["stats"]["kicks"] += 1
             save_db()
-            log(f"KICK {u} in {g}")
-            if not silent and not db["ghost"]:
-                send(g, "تم طرد العضو")
+            log(f"KICK {u} from {g}")
+            if not silent:
+                send(g, "✅ تم طرد العضو")
     except Exception as e:
-        log(f"Failed to kick {u}: {e}")
+        log(f"Kick failed for {u}: {e}")
 
 # ============ SPAM SYSTEM ============
 
@@ -322,6 +248,7 @@ def is_spam(u):
 # ============ MASSKICK ============
 
 def masskick(group, members):
+    kicked = 0
     batch = []
     for u in members:
         if u == my_mid or is_owner(u) or is_admin(u):
@@ -329,309 +256,406 @@ def masskick(group, members):
         batch.append(u)
         if len(batch) >= MASSKICK_BATCH:
             try:
-                cl.kick_user(group, batch)
-            except:
-                pass
-            time.sleep(MASSKICK_DELAY)
-            batch = []
+                cl.kickoutFromGroup(group, batch)
+                kicked += len(batch)
+                log(f"Kicked batch of {len(batch)} members")
+                time.sleep(MASSKICK_DELAY)
+                batch = []
+            except Exception as e:
+                log(f"Batch kick error: {e}")
+                batch = []
+    
     if batch:
         try:
-            cl.kick_user(group, batch)
+            cl.kickoutFromGroup(group, batch)
+            kicked += len(batch)
         except:
             pass
+    
+    return kicked
 
 # ============ MESSAGE HANDLER ============
 
 def handle_msg(msg):
-    if not isinstance(msg, dict) or "text" not in msg:
-        return
+    try:
+        s = msg._from
+        g = msg.to
+        text = msg.text.strip() if msg.text else ""
+        cmd = text.lower()
 
-    s = msg.get("_from", msg.get("from", ""))
-    g = msg.get("to", "")
-    text = msg.get("text", "").strip()
-    cmd = text.lower()
+        db["stats"]["messages"] += 1
 
-    db["stats"]["messages"] += 1
-
-    # Protections
-    if is_banned(s):
-        safe_kick(g, s, True)
-        return
-
-    if db["freeze"] and not is_admin(s):
-        safe_kick(g, s, True)
-        return
-
-    if db["shield"] and not is_admin(s):
-        safe_kick(g, s, True)
-        return
-
-    if db["lock"].get(g) and not is_admin(s):
-        return
-
-    if is_muted(s):
-        return
-
-    if db["protect"]["link"] and LINK_REGEX.search(text) and not is_admin(s):
-        w = add_warn(s)
-        if w >= AUTO_WARN_LIMIT:
-            db["banned"].append(s)
-            save_db()
+        # حماية من المحظورين
+        if is_banned(s):
             safe_kick(g, s, True)
-        else:
-            send(g, f"ممنوع الروابط - تحذير {w}/{AUTO_WARN_LIMIT}")
-        return
+            db["stats"]["protections"] += 1
+            return
 
-    if db["protect"]["spam"] and is_spam(s):
-        w = add_warn(s)
-        if w >= AUTO_WARN_LIMIT:
-            db["banned"].append(s)
-            save_db()
+        # وضع التجميد
+        if db["freeze"] and not is_admin(s):
             safe_kick(g, s, True)
-        return
+            db["stats"]["protections"] += 1
+            return
 
-    if s in db["watch"] and not is_admin(s):
-        db["watch"][s] += 1
-        if db["watch"][s] >= 2:
-            db["banned"].append(s)
-            save_db()
+        # وضع الدرع
+        if db["shield"] and not is_admin(s):
             safe_kick(g, s, True)
-        save_db()
-        return
+            db["stats"]["protections"] += 1
+            return
 
-    m = get_mentions(text)
+        # قفل المجموعة
+        if db["lock"].get(g) and not is_admin(s):
+            return
 
-    # Commands
-    if cmd == "help":
-        send(g,
-"""الأوامر المتاحة:
+        # المكتومين
+        if is_muted(s):
+            return
 
-العامة:
-help - الأوامر
+        # حماية من الروابط
+        if db["protect"]["link"] and LINK_REGEX.search(text) and not is_admin(s):
+            w = add_warn(s)
+            db["stats"]["protections"] += 1
+            if w >= AUTO_WARN_LIMIT:
+                db["banned"].append(s)
+                save_db()
+                safe_kick(g, s, True)
+            else:
+                send(g, f"⚠️ ممنوع الروابط - تحذير {w}/{AUTO_WARN_LIMIT}")
+            return
+
+        # حماية من السبام
+        if db["protect"]["spam"] and is_spam(s):
+            w = add_warn(s)
+            db["stats"]["protections"] += 1
+            if w >= AUTO_WARN_LIMIT:
+                db["banned"].append(s)
+                save_db()
+                safe_kick(g, s, True)
+            return
+
+        # نظام المراقبة
+        if s in db["watch"] and not is_admin(s):
+            db["watch"][s] += 1
+            if db["watch"][s] >= 2:
+                db["banned"].append(s)
+                save_db()
+                safe_kick(g, s, True)
+                db["stats"]["protections"] += 1
+            save_db()
+            return
+
+        m = get_mentions(msg)
+
+        # الأوامر
+        if cmd == "help" or cmd == ".help":
+            send(g, """🤖 أوامر البوت الحماية
+
+📋 للجميع:
+help - قائمة الأوامر
 me - معلوماتك
 ping - فحص البوت
 stats - الإحصائيات
 time - الوقت
 
-الأدمن:
-kick - طرد عضو
-warn - تحذير
-clearwarn - حذف تحذيرات
-mute - كتم (10 دقائق)
-unmute - فك كتم
+👮 الأدمن:
+kick @user - طرد
+warn @user - تحذير
+clearwarn @user - حذف تحذيرات
+mute @user - كتم 10 دقائق
+unmute @user - فك كتم
 lock - قفل الشات
 unlock - فتح الشات
-watch - مراقبة عضو
-unwatch - إلغاء المراقبة
+watch @user - مراقبة
+unwatch @user - إلغاء مراقبة
 
-المالك:
-addadmin - إضافة أدمن
-deladmin - حذف أدمن
-ban - حظر نهائي
-unban - فك حظر
+👑 المالك:
+addadmin @user - إضافة أدمن
+deladmin @user - حذف أدمن
+ban @user - حظر نهائي
+unban @user - فك حظر
 masskick - طرد الجميع
-panic - وضع طوارئ
+panic - وضع الطوارئ
 ghost - وضع شبحي
 unghost - إلغاء شبحي
 shield - تفعيل الدرع
 unshield - إلغاء الدرع
 freeze - تجميد
-unfreeze - فك تجميد""")
+unfreeze - فك تجميد
 
-    elif cmd == "me":
-        role = "مالك" if is_owner(s) else "أدمن" if is_admin(s) else "VIP" if is_vip(s) else "عضو"
-        warns = db["warnings"].get(s, 0)
-        send(g, f"رتبتك: {role}\nتحذيراتك: {warns}/{AUTO_WARN_LIMIT}")
+💡 يمكنك استخدام . قبل الأوامر مثل: .kick""")
 
-    elif cmd == "time":
-        send(g, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        elif cmd == "me" or cmd == ".me":
+            role = "👑 مالك" if is_owner(s) else "👮 أدمن" if is_admin(s) else "⭐ VIP" if is_vip(s) else "👤 عضو"
+            warns = db["warnings"].get(s, 0)
+            send(g, f"""معلوماتك:
+{role}
+⚠️ تحذيرات: {warns}/{AUTO_WARN_LIMIT}
+🆔 MID: {s}""")
 
-    elif cmd == "ping":
-        send(g, "البوت يعمل بشكل طبيعي")
+        elif cmd == "time" or cmd == ".time":
+            send(g, f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-    elif cmd == "stats":
-        send(g, f"""الإحصائيات:
-الرسائل: {db['stats']['messages']}
-الطردات: {db['stats']['kicks']}
-الحظر: {db['stats']['bans']}
-الحمايات: {db['stats']['protections']}""")
+        elif cmd == "ping" or cmd == ".ping":
+            send(g, "✅ البوت شغال ويستجيب بشكل طبيعي")
 
-    # Admin commands
-    elif cmd == "kick" and is_admin(s):
-        if m:
-            for u in m:
-                safe_kick(g, u)
-        else:
-            send(g, "منشن العضو")
+        elif cmd == "stats" or cmd == ".stats":
+            send(g, f"""📊 إحصائيات البوت:
 
-    elif cmd == "warn" and is_admin(s):
-        if m:
-            for u in m:
-                w = add_warn(u)
-                send(g, f"تحذير {w}/{AUTO_WARN_LIMIT}")
-        else:
-            send(g, "منشن العضو")
+📨 الرسائل: {db['stats']['messages']}
+🚫 الطردات: {db['stats']['kicks']}
+⛔ الحظر: {db['stats']['bans']}
+🛡️ الحمايات: {db['stats']['protections']}
 
-    elif cmd == "clearwarn" and is_admin(s):
-        if m:
-            for u in m:
-                db["warnings"].pop(u, None)
+👮 الأدمن: {len(db['admins'])}
+⭐ VIP: {len(db['vip'])}
+🚷 المحظورين: {len(db['banned'])}""")
+
+        # أوامر الأدمن
+        elif (cmd == "kick" or cmd == ".kick") and is_admin(s):
+            if m:
+                for u in m:
+                    safe_kick(g, u)
+            else:
+                send(g, "❌ منشن العضو الي تبي تطرده")
+
+        elif (cmd == "warn" or cmd == ".warn") and is_admin(s):
+            if m:
+                for u in m:
+                    w = add_warn(u)
+                    send(g, f"⚠️ تحذير {w}/{AUTO_WARN_LIMIT}")
+                    if w >= AUTO_WARN_LIMIT:
+                        db["banned"].append(u)
+                        save_db()
+                        safe_kick(g, u, True)
+                        send(g, "⛔ تم الحظر بسبب التحذيرات")
+            else:
+                send(g, "❌ منشن العضو")
+
+        elif (cmd == "clearwarn" or cmd == ".clearwarn") and is_admin(s):
+            if m:
+                for u in m:
+                    db["warnings"].pop(u, None)
+                save_db()
+                send(g, "✅ تم حذف التحذيرات")
+
+        elif (cmd == "mute" or cmd == ".mute") and is_admin(s):
+            if m:
+                for u in m:
+                    db["muted"][u] = time.time() + 600
+                save_db()
+                send(g, "🔇 تم الكتم لمدة 10 دقائق")
+
+        elif (cmd == "unmute" or cmd == ".unmute") and is_admin(s):
+            if m:
+                for u in m:
+                    db["muted"].pop(u, None)
+                save_db()
+                send(g, "🔊 تم فك الكتم")
+
+        elif (cmd == "lock" or cmd == ".lock") and is_admin(s):
+            db["lock"][g] = True
             save_db()
-            send(g, "تم حذف التحذيرات")
+            send(g, "🔒 تم قفل الشات - فقط الأدمن يقدرون يتكلمون")
 
-    elif cmd == "mute" and is_admin(s):
-        if m:
-            for u in m:
-                db["muted"][u] = time.time() + 600
+        elif (cmd == "unlock" or cmd == ".unlock") and is_admin(s):
+            db["lock"][g] = False
             save_db()
-            send(g, "تم الكتم لمدة 10 دقائق")
+            send(g, "🔓 تم فتح الشات")
 
-    elif cmd == "unmute" and is_admin(s):
-        if m:
-            for u in m:
-                db["muted"].pop(u, None)
+        elif (cmd == "watch" or cmd == ".watch") and is_admin(s):
+            if m:
+                for u in m:
+                    db["watch"][u] = 0
+                save_db()
+                send(g, "👁️ تمت إضافة للمراقبة - أول رسالة = طرد")
+
+        elif (cmd == "unwatch" or cmd == ".unwatch") and is_admin(s):
+            if m:
+                for u in m:
+                    db["watch"].pop(u, None)
+                save_db()
+                send(g, "✅ تم إلغاء المراقبة")
+
+        # أوامر المالك
+        elif (cmd == "addadmin" or cmd == ".addadmin") and is_owner(s):
+            if m:
+                for u in m:
+                    if u not in db["admins"]:
+                        db["admins"].append(u)
+                save_db()
+                send(g, "✅ تم إضافة الأدمن")
+
+        elif (cmd == "deladmin" or cmd == ".deladmin") and is_owner(s):
+            if m:
+                for u in m:
+                    if u in db["admins"]:
+                        db["admins"].remove(u)
+                save_db()
+                send(g, "✅ تم حذف الأدمن")
+
+        elif (cmd == "ban" or cmd == ".ban") and is_owner(s):
+            if m:
+                for u in m:
+                    if u not in db["banned"]:
+                        db["banned"].append(u)
+                        db["stats"]["bans"] += 1
+                        safe_kick(g, u, True)
+                save_db()
+                send(g, "⛔ تم الحظر نهائياً")
+
+        elif (cmd == "unban" or cmd == ".unban") and is_owner(s):
+            if m:
+                for u in m:
+                    if u in db["banned"]:
+                        db["banned"].remove(u)
+                save_db()
+                send(g, "✅ تم فك الحظر")
+
+        elif (cmd == "masskick" or cmd == ".masskick") and is_owner(s):
+            try:
+                send(g, "⏳ جاري طرد جميع الأعضاء...")
+                group = cl.getGroup(g)
+                members = [mem.mid for mem in group.members]
+                kicked = masskick(g, members)
+                send(g, f"✅ تم طرد {kicked} عضو")
+            except Exception as e:
+                log(f"Masskick error: {e}")
+                send(g, "❌ حدث خطأ في الطرد الجماعي")
+
+        elif (cmd == "panic" or cmd == ".panic") and is_owner(s):
+            db["shield"] = True
+            db["freeze"] = True
             save_db()
-            send(g, "تم فك الكتم")
+            send(g, "🚨 وضع الطوارئ مفعل - كل الأعضاء سيطردون")
 
-    elif cmd == "lock" and is_admin(s):
-        db["lock"][g] = True
-        save_db()
-        send(g, "تم قفل الشات")
-
-    elif cmd == "unlock" and is_admin(s):
-        db["lock"][g] = False
-        save_db()
-        send(g, "تم فتح الشات")
-
-    elif cmd == "watch" and is_admin(s):
-        if m:
-            for u in m:
-                db["watch"][u] = 0
+        elif (cmd == "ghost" or cmd == ".ghost") and is_owner(s):
+            db["ghost"] = True
             save_db()
-            send(g, "تمت إضافة للمراقبة")
+            # لا نرسل رسالة في وضع الشبح
 
-    elif cmd == "unwatch" and is_admin(s):
-        if m:
-            for u in m:
-                db["watch"].pop(u, None)
+        elif (cmd == "unghost" or cmd == ".unghost") and is_owner(s):
+            db["ghost"] = False
             save_db()
-            send(g, "تم إلغاء المراقبة")
+            send(g, "👻 تم إلغاء الوضع الشبحي")
 
-    # Owner commands
-    elif cmd == "addadmin" and is_owner(s):
-        if m:
-            for u in m:
-                if u not in db["admins"]:
-                    db["admins"].append(u)
+        elif (cmd == "shield" or cmd == ".shield") and is_owner(s):
+            db["shield"] = True
             save_db()
-            send(g, "تم إضافة الأدمن")
+            send(g, "🛡️ تم تفعيل الدرع - كل عضو جديد يطرد")
 
-    elif cmd == "deladmin" and is_owner(s):
-        if m:
-            for u in m:
-                if u in db["admins"]:
-                    db["admins"].remove(u)
+        elif (cmd == "unshield" or cmd == ".unshield") and is_owner(s):
+            db["shield"] = False
             save_db()
-            send(g, "تم حذف الأدمن")
+            send(g, "✅ تم إلغاء الدرع")
 
-    elif cmd == "ban" and is_owner(s):
-        if m:
-            for u in m:
-                if u not in db["banned"]:
-                    db["banned"].append(u)
-                    db["stats"]["bans"] += 1
-                    safe_kick(g, u, True)
+        elif (cmd == "freeze" or cmd == ".freeze") and is_owner(s):
+            db["freeze"] = True
             save_db()
-            send(g, "تم الحظر نهائيا")
+            send(g, "❄️ تم التجميد - لا أحد يقدر يتكلم")
 
-    elif cmd == "unban" and is_owner(s):
-        if m:
-            for u in m:
-                if u in db["banned"]:
-                    db["banned"].remove(u)
+        elif (cmd == "unfreeze" or cmd == ".unfreeze") and is_owner(s):
+            db["freeze"] = False
             save_db()
-            send(g, "تم فك الحظر")
+            send(g, "✅ تم فك التجميد")
 
-    elif cmd == "masskick" and is_owner(s):
-        try:
-            group = cl.get_group(g)
-            members = [mem.get("mid") for mem in group.get("members", [])]
-            masskick(g, members)
-            send(g, "تم طرد جميع الأعضاء")
-        except Exception as e:
-            log(f"Masskick error: {e}")
+    except Exception as e:
+        log(f"Handler error: {e}")
 
-    elif cmd == "panic" and is_owner(s):
-        db["shield"] = True
-        db["freeze"] = True
-        save_db()
-        send(g, "وضع الطوارئ مفعل")
+# ============ OPERATIONS HANDLER ============
 
-    elif cmd == "ghost" and is_owner(s):
-        db["ghost"] = True
-        save_db()
-
-    elif cmd == "unghost" and is_owner(s):
-        db["ghost"] = False
-        save_db()
-        send(g, "تم إلغاء الوضع الشبحي")
-
-    elif cmd == "shield" and is_owner(s):
-        db["shield"] = True
-        save_db()
-        send(g, "تم تفعيل الدرع")
-
-    elif cmd == "unshield" and is_owner(s):
-        db["shield"] = False
-        save_db()
-        send(g, "تم إلغاء الدرع")
-
-    elif cmd == "freeze" and is_owner(s):
-        db["freeze"] = True
-        save_db()
-        send(g, "تم التجميد")
-
-    elif cmd == "unfreeze" and is_owner(s):
-        db["freeze"] = False
-        save_db()
-        send(g, "تم فك التجميد")
+def handle_operation(op):
+    try:
+        # حماية من الدعوات
+        if db["protect"]["invite"]:
+            if op.type == 13:  # NOTIFIED_INVITE_INTO_GROUP
+                if not is_admin(op.param1):
+                    try:
+                        cl.kickoutFromGroup(op.param2, [op.param1])
+                        db["stats"]["protections"] += 1
+                        log(f"Kicked inviter {op.param1}")
+                    except:
+                        pass
+            
+            elif op.type == 17:  # NOTIFIED_ACCEPT_GROUP_INVITATION
+                if db["shield"] and not is_admin(op.param1):
+                    try:
+                        cl.kickoutFromGroup(op.param2, [op.param1])
+                        db["stats"]["protections"] += 1
+                        log(f"Shield kicked {op.param1}")
+                    except:
+                        pass
+        
+        # حماية من إلغاء الدعوة
+        if db["protect"]["qr"]:
+            if op.type == 19:  # NOTIFIED_UPDATE_GROUP
+                if not is_admin(op.param1):
+                    group = cl.getGroup(op.param1)
+                    if group.preventJoinByTicket:
+                        try:
+                            cl.kickoutFromGroup(op.param1, [op.param2])
+                            db["stats"]["protections"] += 1
+                            log(f"QR protection kicked {op.param2}")
+                        except:
+                            pass
+    
+    except Exception as e:
+        log(f"Operation handler error: {e}")
 
 # ============ MAIN LOOP ============
 
 def main():
-    print("البوت شغال ويستقبل الرسائل...")
-    print("اكتب CTRL+C للإيقاف\n")
+    log("Bot started successfully")
     
-    last_check = time.time()
-    processed = set()
+    processed_ops = set()
     
     while True:
         try:
-            if time.time() - last_check > 1:
-                messages = cl.get_recent_messages(my_mid, 30)
-                
-                for msg in messages:
-                    msg_id = msg.get("id")
-                    if msg_id and msg_id not in processed:
-                        processed.add(msg_id)
-                        if msg.get("contentType") == 0:
-                            handle_msg(msg)
-                        
-                        if len(processed) > 500:
-                            processed.clear()
-                
-                last_check = time.time()
+            # استقبال العمليات
+            ops = cl.fetchOps(cl.revision, 50)
             
-            time.sleep(1)
+            for op in ops:
+                # تجنب معالجة نفس العملية مرتين
+                op_id = f"{op.revision}_{op.type}"
+                if op_id in processed_ops:
+                    continue
+                processed_ops.add(op_id)
+                
+                # تحديث الـ revision
+                cl.revision = max(cl.revision, op.revision)
+                
+                # معالجة الرسائل
+                if op.type == 26:  # RECEIVE_MESSAGE
+                    if op.message:
+                        handle_msg(op.message)
+                
+                # معالجة العمليات الأخرى
+                else:
+                    handle_operation(op)
+                
+                # تنظيف الذاكرة
+                if len(processed_ops) > 1000:
+                    processed_ops.clear()
+            
+            # حفظ البيانات كل فترة
+            save_db()
+            
+            time.sleep(0.5)
             
         except KeyboardInterrupt:
-            print("\nإيقاف البوت...")
+            print("\n\n⏹️  إيقاف البوت...")
             save_db()
-            print("تم حفظ البيانات. وداعا!")
+            log("Bot stopped by user")
+            print("✅ تم حفظ البيانات. وداعاً!")
             break
+            
         except Exception as e:
-            log(f"Error: {e}")
+            log(f"Main loop error: {e}")
             time.sleep(2)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        log(f"Fatal error: {e}")
+        print(f"\n❌ خطأ كبير: {e}")
+        print("البوت سيتوقف الآن")
