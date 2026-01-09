@@ -1,0 +1,18 @@
+{
+    "protect": true,
+    "qrprotect": true,
+    "inviteprotect": true,
+    "cancelprotect": true,
+    "blacklist": {},
+    "autoJoin": true,
+    "autoAdd": false,
+    "autoLeave": false,
+    "lang": "AR",
+    "keyCommand": ".",
+    "owner": [
+        "ضع_MID_حسابك_هنا"
+    ],
+    "admin": [],
+    "staff": [],
+    "bots": []
+}
